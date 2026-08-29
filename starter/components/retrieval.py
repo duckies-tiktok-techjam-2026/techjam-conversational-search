@@ -28,6 +28,19 @@ _STOPWORDS = {
 }
 _MAX_SNIPPETS = 8
 
+# Turns that carry no product information: boundary answers, "nothing more for
+# that attribute" non-answers, and generic negative feedback.
+_NON_ANSWER_RE = re.compile(
+    r"(?:do not|don't|dont) have (?:an?|any)\b[^.]*preference"
+    r"|no preference"
+    r"|use your judgment"
+    r"|not quite right"
+)
+# "i'm looking for men's t-shirts, but i'm still exploring." -> the category is
+# handled by _category_hint; the rest of the opener is filler.
+_OPENER_RE = re.compile(r"^i'?m looking for .*?[,.]\s*")
+_SNIPPET_SPLIT_RE = re.compile(r";|(?<=\.)\s+")
+
 
 @dataclass
 class Candidate:
@@ -112,8 +125,42 @@ class CandidateIndex:
         return [(str(asin), -score) for asin, score in rows]
 
     def _rare_terms(self, snippet: str, k: int = 4) -> list[str]:
-        seen = list(dict.fromkeys(_tokens(snippet)))
-        return sorted(seen, key=lambda token: self.df.get(token, 1))[:k]
+        # df == 0 means the token is nowhere in the catalog: keeping it would make
+        # any AND it appears in unsatisfiable.
+        seen = [token for token in dict.fromkeys(_tokens(snippet)) if self.df.get(token, 0)]
+        return sorted(seen, key=lambda token: self.df[token])[:k]
+
+    @staticmethod
+    def _disclosure_snippets(state: SessionState) -> list[str]:
+        """Verbatim constraint text the customer actually said, newest turns last.
+
+        The parser only keeps tokens from its fixed vocab lists, so the
+        discriminative part of a disclosure ("4.3 oz", "jersey knit", "tagless")
+        never reaches ``positive_constraints``. Retrieval reads the raw turn text
+        instead and lets ``_rare_terms`` pick what is selective.
+        """
+        parsed_messages = getattr(state, "parsed_messages", None) or []
+        start_index = 0
+        for index, parsed in enumerate(parsed_messages):
+            if parsed.override:
+                start_index = index
+
+        snippets: list[str] = []
+        for index, parsed in enumerate(parsed_messages[start_index:], start=start_index):
+            text = str(parsed.normalized_text or "")
+            if not text or _NON_ANSWER_RE.search(text):
+                continue
+            if ":" in text:
+                payload = text.split(":", 1)[1]
+            elif index == 0:
+                continue
+            else:
+                payload = _OPENER_RE.sub("", text)
+            for part in _SNIPPET_SPLIT_RE.split(payload):
+                part = part.strip(" .,-")
+                if _tokens(part):
+                    snippets.append(part)
+        return list(dict.fromkeys(snippets))
 
     @staticmethod
     def _category_hint(state: SessionState) -> str:
@@ -138,21 +185,29 @@ class CandidateIndex:
                 candidate.paths.add(path)
                 candidate.fts_score = max(candidate.fts_score, score)
 
-        snippets: list[str] = []
-        structured: list[str] = []
-        for attribute, constraints in state.positive_constraints.items():
-            for constraint in constraints:
-                if attribute in ("material", "color", "brand"):
-                    structured.append(constraint.value)
-                else:
-                    snippets.append(constraint.value)
+        # Snippets are verbatim customer text; structured values come from the
+        # parser, which is reliable for the closed vocabularies it does cover.
+        snippets = self._disclosure_snippets(state)
+        structured = [
+            constraint.value
+            for attribute in ("material", "color", "brand")
+            for constraint in state.positive_constraints.get(attribute, [])
+        ]
 
-        # Path A -- rare-term AND, one query per disclosed snippet.
+        # Path A -- rare-term AND, one query per disclosed snippet. A long verbatim
+        # snippet can AND its way to zero hits (truncated details, paraphrase), so
+        # relax the conjunction before falling back to OR.
         for snippet in snippets[:_MAX_SNIPPETS]:
             terms = self._rare_terms(snippet, k=4)
             if not terms:
                 continue
-            hits = self._match(" AND ".join(f'"{t}"' for t in terms), 80)
+            hits: list[tuple[str, float]] = []
+            for width in (4, 2):
+                if width > len(terms):
+                    continue
+                hits = self._match(" AND ".join(f'"{t}"' for t in terms[:width]), 80)
+                if len(hits) >= 5:
+                    break
             if len(hits) < 5 and len(terms) > 1:
                 hits = self._match(" OR ".join(f'"{t}"' for t in terms), 80)
             add("rare_and", hits)
@@ -188,7 +243,8 @@ class CandidateIndex:
             exprs.pop()
 
         # Path C-fallback -- broad OR, only carries turns with no usable clue.
-        terms = list(dict.fromkeys(_tokens(getattr(state, "query_text", "") or "")))[:40]
+        fallback_text = " ".join([getattr(state, "query_text", "") or "", *snippets])
+        terms = list(dict.fromkeys(_tokens(fallback_text)))[:40]
         add("bm25_all", self._match(" OR ".join(f'"{t}"' for t in terms), 100))
 
         # Path D -- category + structured attribute includes.

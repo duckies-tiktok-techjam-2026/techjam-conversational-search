@@ -56,19 +56,24 @@ starter/
         session_store.py   per-session state and override/boundary transitions
         search_plan.py    active state to retrieval inputs
         retrieval.py       catalog index + candidate-pool generation
+        rerank.py          deterministic scoring of the candidate pool
         questions.py       clarification attribute selection
 ```
 
 The component handoff is:
 
 ```text
-customer message -> parse_message() -> SessionStore.update()
-    -> CandidateIndex.get_candidates(state) -> ranking -> Agent response
+customer message -> parse_message() -> SessionStore.update() -> build_search_plan()
+    -> CandidateIndex.get_candidates(state) -> rerank() -> Agent response
 ```
 
 `SearchPlan` exposes `required_terms`, `optional_terms`, `excluded_terms`, `exact_phrases`, and `attribute_values`. The parser and session store do not depend on SQLite or evaluator internals.
 
-`retrieval.py` owns the **candidate pool**: `CandidateIndex` builds an in-memory SQLite FTS5 index plus a document-frequency table once in `__init__`, and `get_candidates(state, pool_size=200)` returns up to `pool_size` `Candidate` records (`parent_asin`, `paths`, `fts_score`) by unioning several retrieval paths. The order is loose — a downstream ranking step re-scores the pool and produces the final Top 10. `agent.py` remains responsible for response formatting. See `docs/retrieval.md`.
+`retrieval.py` owns the **candidate pool**: `CandidateIndex` builds an in-memory SQLite FTS5 index plus a document-frequency table once in `__init__`, and `get_candidates(state, pool_size=200)` returns up to `pool_size` `Candidate` records (`parent_asin`, `paths`, `fts_score`) by unioning several retrieval paths. The order is loose.
+
+Its lexical paths read the **verbatim** customer text (`parsed_messages[i].normalized_text`) rather than the parser's `Constraint` values, because the parser only keeps tokens from its fixed vocabularies and would drop the discriminative part of a disclosure (`4.3 oz`, `jersey knit`, `tagless`). `_disclosure_snippets` takes the turns from the last override onward, strips boilerplate and no-information turns, and splits them into snippets; `_rare_terms` then selects the most selective tokens by document frequency. `positive_constraints` is still the source for structured material/color/brand includes.
+
+`rerank.py` turns that pool into the final Top 10. `rerank(candidates, state, plan, products)` scores every pooled `parent_asin` with a deterministic additive model in `score_product` and returns them best-first. Positive signals: the retrieval score carried from the pool, exact-phrase hits against title/features/details, field-weighted token overlap, per-attribute containment (hard attributes weighted above soft ones), profile preference-tag bonuses, and a rating/review-count tie-break. Penalties: excluded-term contradictions, color/material mismatch, budget violations (`maximum` over cap, `around` off by more than 35%), and a feedback penalty that demotes items the customer rejected after a "not quite right" turn. It consumes the `SearchPlan`, the `SessionState`, and the in-memory catalog map that `agent.py` loads in `__init__`. `agent.py` wires the two together with `CANDIDATE_POOL_SIZE = 150` and remains responsible for response formatting.
 
 Validate the package import and component tests with:
 
@@ -83,8 +88,10 @@ Measure candidate-pool recall (does the pool contain the target?) with:
 python3 -m scripts.recall_check
 ```
 
-The included weak BM25 starter scores Hit Rate@10 `0.125`, MRR `0.068034`, and
-MTTC `9.81` on the released public set. See `docs/baseline_results.json`.
+The frozen weak-BM25 reference scores Hit Rate@10 `0.125`, MRR `0.068034`, and
+MTTC `9.81` on the released public set (`docs/baseline_results.json`) — the target
+to beat, not the current pipeline. The current pipeline scores Hit Rate@10 `0.790`,
+MRR `0.458`, MTTC `4.64`, Technical Score `0.660`.
 
 ## Agent Interface
 
