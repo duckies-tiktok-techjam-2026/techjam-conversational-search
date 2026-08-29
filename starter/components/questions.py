@@ -3,8 +3,11 @@ from __future__ import annotations
 from .models import SessionState
 
 
-EMPTY_INTENT_PRIORITY = ("category", "use_case", "feature", "material", "color", "size", "style", "brand", "budget")
-ACTIVE_INTENT_PRIORITY = ("feature", "material", "color", "size", "style", "brand", "budget", "use_case", "category")
+# Prefer the highest-yield attributes first. The simulator is most informative when we ask
+# for a concrete discriminating attribute (especially "feature") instead of repeating broad
+# or already-exhausted categories.
+EMPTY_INTENT_PRIORITY = ("feature", "category", "use_case", "material", "color", "size", "style", "brand", "budget", "other")
+ACTIVE_INTENT_PRIORITY = ("feature", "material", "color", "size", "style", "brand", "budget", "use_case", "category", "other")
 QUESTION_TEXT = {
     "category": "What type of item are you looking for?",
     "material": "Do you have a material preference?",
@@ -23,6 +26,11 @@ def choose_question_attribute(state: SessionState, turn: int) -> str | None:
     del turn
     priorities = ACTIVE_INTENT_PRIORITY if state.positive_constraints else EMPTY_INTENT_PRIORITY
     excluded = state.disclosed_attributes | state.unconstrained_attributes | state.asked_attributes
+
+    # Avoid repeated asks of the same attribute when there are alternatives available.
+    if state.last_asked_attribute and state.last_asked_attribute in excluded:
+        excluded = excluded | {state.last_asked_attribute}
+
     for attribute in priorities:
         if attribute not in excluded:
             return attribute
