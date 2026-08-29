@@ -43,6 +43,37 @@ python3 -m evaluator.local_evaluator
 Edit `starter/agent.py` to implement your system. Do not edit the evaluator or public labels when reporting your local score.
 The command writes per-session results and aggregate metrics to `results.json`.
 
+## Modular Agent Components
+
+The evaluator imports `Agent` from `starter.agent`. The entry point coordinates the following standard-library components:
+
+```text
+starter/
+    agent.py
+    components/
+        models.py          shared parser, session, and search-plan types
+        parser.py          deterministic message parsing
+        session_store.py   per-session state and override/boundary transitions
+        search_plan.py    active state to retrieval inputs
+        questions.py       clarification attribute selection
+```
+
+The component handoff is:
+
+```text
+customer message -> parse_message() -> SessionStore.update()
+    -> build_search_plan() -> retrieval/ranking -> Agent response
+```
+
+`SearchPlan` exposes `required_terms`, `optional_terms`, `excluded_terms`, `exact_phrases`, and `attribute_values` for the retrieval implementation. The parser and session store do not depend on SQLite or evaluator internals. Retrieval should consume this plan and return catalog `parent_asin` values; `agent.py` remains responsible for response formatting.
+
+Validate the package import and component tests with:
+
+```bash
+python -c "from starter.agent import Agent"
+python -m unittest discover -s tests
+```
+
 The included weak BM25 starter scores Hit Rate@10 `0.125`, MRR `0.068034`, and
 MTTC `9.81` on the released public set. See `docs/baseline_results.json`.
 
