@@ -55,6 +55,7 @@ starter/
         parser.py          deterministic message parsing
         session_store.py   per-session state and override/boundary transitions
         search_plan.py    active state to retrieval inputs
+        retrieval.py       catalog index + candidate-pool generation
         questions.py       clarification attribute selection
 ```
 
@@ -62,16 +63,24 @@ The component handoff is:
 
 ```text
 customer message -> parse_message() -> SessionStore.update()
-    -> build_search_plan() -> retrieval/ranking -> Agent response
+    -> CandidateIndex.get_candidates(state) -> ranking -> Agent response
 ```
 
-`SearchPlan` exposes `required_terms`, `optional_terms`, `excluded_terms`, `exact_phrases`, and `attribute_values` for the retrieval implementation. The parser and session store do not depend on SQLite or evaluator internals. Retrieval should consume this plan and return catalog `parent_asin` values; `agent.py` remains responsible for response formatting.
+`SearchPlan` exposes `required_terms`, `optional_terms`, `excluded_terms`, `exact_phrases`, and `attribute_values`. The parser and session store do not depend on SQLite or evaluator internals.
+
+`retrieval.py` owns the **candidate pool**: `CandidateIndex` builds an in-memory SQLite FTS5 index plus a document-frequency table once in `__init__`, and `get_candidates(state, pool_size=200)` returns up to `pool_size` `Candidate` records (`parent_asin`, `paths`, `fts_score`) by unioning several retrieval paths. The order is loose — a downstream ranking step re-scores the pool and produces the final Top 10. `agent.py` remains responsible for response formatting. See `docs/retrieval.md`.
 
 Validate the package import and component tests with:
 
 ```bash
 python -c "from starter.agent import Agent"
 python -m unittest discover -s tests
+```
+
+Measure candidate-pool recall (does the pool contain the target?) with:
+
+```bash
+python3 -m scripts.recall_check
 ```
 
 The included weak BM25 starter scores Hit Rate@10 `0.125`, MRR `0.068034`, and
