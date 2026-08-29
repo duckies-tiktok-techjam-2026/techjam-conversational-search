@@ -6,10 +6,12 @@ from collections.abc import Mapping, Sequence
 
 from .models import SearchPlan, SessionState
 from .parser import COLOR_TERMS, MATERIAL_TERMS
+from .snippets import tokens as snippet_tokens
 
 CANDIDATE_POOL_SIZE = 150
 BUDGET_RE = re.compile(r"(maximum|around)\s+\$(\d+(?:\.\d+)?)", re.IGNORECASE)
 TOKEN_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
+NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 
 _FIELD_WEIGHTS = {
     "title": 5.0,
@@ -19,6 +21,9 @@ _FIELD_WEIGHTS = {
     "store": 1.5,
     "description": 1.0,
 }
+# Weight of one fully-covered clue. Flat between ~5 and ~12 on the public set;
+# above that the coverage term starts drowning the structured signals.
+_COVERAGE_WEIGHT = 6.0
 _HARD_ATTRIBUTES = ("category", "material", "color", "size", "style", "brand", "feature", "use_case")
 
 
@@ -63,15 +68,57 @@ def _contains(haystack: str, needle: str) -> bool:
     return re.search(rf"\b{re.escape(needle)}\b", haystack) is not None
 
 
+def _canonical(text: str) -> str:
+    """Punctuation-free, space-padded form: ' fabric type 100 cotton '.
+
+    The customer echoes the target's own ``features`` / ``details`` strings, but
+    the evaluator renders a detail as ``"key: value"`` while our field map
+    flattens it to ``"key value"`` -- a plain substring test misses on the
+    punctuation alone. Padding both sides keeps the match on token boundaries
+    ("cotton" must not match "cottonwood").
+    """
+    return " " + NON_ALNUM_RE.sub(" ", text).strip() + " "
+
+
 def _phrase_score(fields: Mapping[str, str], phrases: Sequence[str]) -> float:
+    if not phrases:
+        return 0.0
+    title = _canonical(fields["title"])
+    strong = _canonical(_combined_text(fields, "categories", "features", "details"))
+    description = _canonical(fields["description"])
     score = 0.0
     for phrase in phrases:
-        if _contains(fields["title"], phrase):
+        needle = _canonical(phrase)
+        if needle == "  ":
+            continue
+        if needle in title:
             score += 5.0
-        elif _contains(_combined_text(fields, "categories", "features", "details"), phrase):
+        elif needle in strong:
             score += 2.5
-        elif _contains(fields["description"], phrase):
+        elif needle in description:
             score += 1.0
+    return score
+
+
+def _snippet_coverage(fields: Mapping[str, str], snippets: Sequence[str]) -> float:
+    """Per-clue token coverage -- partial credit where ``_phrase_score`` is all-or-nothing.
+
+    A disclosed constraint is truncated at 180 characters and may be split
+    mid-word, so the exact phrase often misses even on the target. Scoring each
+    clue by the share of its tokens present keeps the evidence *per clue*, unlike
+    ``_token_overlap``, where one long clue's tokens drown out the others.
+    """
+    if not snippets:
+        return 0.0
+    strong = _tokens(_combined_text(fields, "title", "categories", "features", "details"))
+    if not strong:
+        return 0.0
+    score = 0.0
+    for snippet in snippets:
+        terms = snippet_tokens(snippet)
+        if not terms:
+            continue
+        score += _COVERAGE_WEIGHT * sum(1 for term in terms if term in strong) / len(terms)
     return score
 
 
@@ -218,10 +265,17 @@ def score_product(
 ) -> float:
     fields = _field_map(product)
     unconstrained = state.unconstrained_attributes
-    query_terms = list(dict.fromkeys([*plan.required_terms, *plan.optional_terms]))
+    # Snippet terms carry what the parser drops ("jersey", "tagless", "4.3 oz"),
+    # i.e. the tokens retrieval actually matched on.
+    query_terms = list(dict.fromkeys([
+        *plan.required_terms,
+        *plan.snippet_terms,
+        *plan.optional_terms,
+    ]))
     return (
         retrieval_score
         + _override_boost(state) * _phrase_score(fields, plan.exact_phrases)
+        + _snippet_coverage(fields, plan.exact_phrases)
         + _token_overlap(fields, query_terms)
         + _attribute_score(fields, plan, unconstrained)
         + _optional_score(fields, plan.optional_terms)

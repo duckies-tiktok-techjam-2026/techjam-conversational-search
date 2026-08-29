@@ -16,11 +16,10 @@ class SearchPlanTest(unittest.TestCase):
         )
 
     def test_builds_required_optional_excluded_and_phrase_inputs(self) -> None:
-        self.store.update(
-            self.state,
-            "Black leather hiking boots",
-            parse_message("Black leather hiking boots"),
-        )
+        # Phrased the way the simulator opens a `buying` session: the lead-in is
+        # boilerplate, everything after the colon is the disclosed constraint.
+        opener = "I'm looking for boots. A key requirement is: black leather hiking boots."
+        self.store.update(self.state, opener, parse_message(opener))
         self.state.negative_constraints["color"] = [
             parse_message("without red").constraints[0]
         ]
@@ -33,6 +32,33 @@ class SearchPlanTest(unittest.TestCase):
         self.assertEqual(plan.exact_phrases, ["black leather hiking boots"])
         self.assertEqual(plan.attribute_values["material"], ["leather"])
         self.assertEqual(plan.attribute_values["color"], ["black"])
+
+    def test_phrases_are_the_disclosed_clues_not_the_whole_turn(self) -> None:
+        opener = "I'm looking for t-shirts. A key requirement is: fabric type: 100% cotton."
+        self.store.update(self.state, opener, parse_message(opener))
+        reply = "For that, what matters is: 4.3 oz jersey knit; tagless collar."
+        self.store.update(self.state, reply, parse_message(reply))
+
+        plan = build_search_plan(self.state)
+
+        self.assertEqual(
+            plan.exact_phrases,
+            ["fabric type: 100% cotton", "4.3 oz jersey knit", "tagless collar"],
+        )
+        # The parser's vocab lists only reach "cotton"; retrieval matched on the
+        # rest, and now so does rerank.
+        for term in ("jersey", "knit", "tagless", "collar", "oz"):
+            self.assertIn(term, plan.snippet_terms)
+        # "4.3" survives only as a phrase -- tokenization splits it and drops the
+        # single characters.
+        self.assertNotIn("4.3", plan.snippet_terms)
+
+    def test_non_answer_turns_contribute_no_phrases(self) -> None:
+        self.store.mark_question(self.state, "color")
+        reply = "I don't have a preference for color; please use your judgment."
+        self.store.update(self.state, reply, parse_message(reply))
+
+        self.assertEqual(build_search_plan(self.state).exact_phrases, [])
 
     def test_omits_boundary_attributes(self) -> None:
         self.store.mark_question(self.state, "color")

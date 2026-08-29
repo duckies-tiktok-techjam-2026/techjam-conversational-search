@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from starter.components.parser import parse_message
-from starter.components.rerank import rerank, score_product
+from starter.components.rerank import _field_map, _phrase_score, rerank, score_product
 from starter.components.search_plan import build_search_plan
 from starter.components.session_store import SessionStore
 
@@ -121,6 +121,53 @@ class RerankTest(unittest.TestCase):
             {**self.products, "BOOT2": similar},
         )
         self.assertEqual(ranked[0], "BOOT2")
+
+    def test_verbatim_clue_outranks_a_product_the_parser_cannot_tell_apart(self) -> None:
+        # Both shirts are cotton, so every parsed constraint matches both; only the
+        # verbatim clue text ("4.3 oz jersey knit", "tagless") separates them.
+        message = "For that, what matters is: fabric type: 100% cotton; 4.3 oz jersey knit tagless"
+        self.store.update(self.state, message, parse_message(message))
+        plan = build_search_plan(self.state)
+        target = {
+            "parent_asin": "TEE",
+            "title": "Classic cotton tee",
+            "categories": ["Clothing", "Shirts"],
+            "features": ["4.3 oz jersey knit tagless"],
+            "details": {"Fabric type": "100% Cotton"},
+            "store": "Tee Co",
+            "description": ["Everyday tee"],
+            "price": 15.0,
+            "average_rating": 4.2,
+            "rating_number": 40,
+        }
+        decoy = {
+            **target,
+            "parent_asin": "DECOY",
+            "features": ["heavyweight fleece"],
+            "details": {"Fabric type": "100% Cotton"},
+            "average_rating": 4.9,
+            "rating_number": 90000,
+        }
+        ranked = rerank(
+            [
+                {"parent_asin": "DECOY", "retrieval_score": 9.0},
+                {"parent_asin": "TEE", "retrieval_score": 6.0},
+            ],
+            self.state,
+            plan,
+            {"TEE": target, "DECOY": decoy},
+        )
+        self.assertEqual(ranked[0], "TEE")
+
+    def test_phrase_match_ignores_punctuation_between_the_two_renderings(self) -> None:
+        # The customer says "fabric type: 100% cotton"; the same detail reaches the
+        # scorer as "fabric type 100% cotton".
+        message = "For that, what matters is: fabric type: 100% cotton"
+        self.store.update(self.state, message, parse_message(message))
+        plan = build_search_plan(self.state)
+        matching = {**self.red_shirt, "parent_asin": "MATCH", "details": {"Fabric type": "100% Cotton"}}
+        self.assertEqual(plan.exact_phrases, ["fabric type: 100% cotton"])
+        self.assertEqual(_phrase_score(_field_map(matching), plan.exact_phrases), 2.5)
 
     def test_deduplicates_and_drops_blank_ids(self) -> None:
         self.store.update(self.state, "boots", parse_message("boots"))

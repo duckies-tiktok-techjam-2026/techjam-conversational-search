@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,10 @@ class SearchPlan:
     excluded_terms: list[str]
     exact_phrases: list[str]
     attribute_values: dict[str, list[str]]
+    # Raw tokens of the verbatim disclosure snippets behind ``exact_phrases``;
+    # what the parser drops on the floor. Defaulted so the empty-plan fallback in
+    # rerank keeps working positionally.
+    snippet_terms: list[str] = field(default_factory=list)
 
 
 @dataclass

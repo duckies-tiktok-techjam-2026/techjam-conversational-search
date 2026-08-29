@@ -121,23 +121,29 @@ is now used for what it is good at — the closed vocabularies (material/color/b
 `override` (clear soft prefs, keep category) and `boundary` (mark attribute unconstrained)
 transitions.
 - `search_plan.py` — `build_search_plan(state) -> SearchPlan` with `required_terms`,
-`optional_terms`, `excluded_terms`, `exact_phrases`, `attribute_values`.
+`optional_terms`, `excluded_terms`, `exact_phrases`, `attribute_values`, `snippet_terms`.
+`exact_phrases` / `snippet_terms` are the verbatim disclosure snippets and their tokens
+(`snippets.disclosure_snippets`), i.e. the same text retrieval searched on — not the parsed
+constraints.
 - `retrieval.py` — `CandidateIndex`: builds an in-memory FTS5 index + a token
-document-frequency table in `__init__`; `get_candidates(state, pool_size=200)` unions three
-paths — rare-term AND per snippet, conjunctive core (AND all clues, drop least-selective
-clause if too strict, broad-OR fallback), category/material includes — and returns
-`Candidate(parent_asin, paths, fts_score)`, loosely ordered. Snippets come from
-`_disclosure_snippets(state)`: the **verbatim** `parsed_messages[i].normalized_text` from the
-last override onward, minus boilerplate (leading `I'm looking for …` opener, text before the
-`:` lead-in) and minus no-information turns (`_NON_ANSWER_RE`: boundary answers, "no
+document-frequency table in `__init__`; `get_candidates(state, pool_size=200)` unions three paths — rare-term AND per snippet, conjunctive core (AND all clues, drop least-selective clause if too strict, broad-OR fallback), category/material includes — and returns `Candidate(parent_asin, paths, fts_score)`, loosely ordered. Snippets come from
+`snippets.disclosure_snippets(state)`: the **verbatim** `parsed_messages[i].normalized_text` from the last override onward, minus boilerplate (leading `I'm looking for …` opener, text before the`:` lead-in) and minus no-information turns (`NON_ANSWER_RE`: boundary answers, "no
 additional preference", "not quite right"), split on `;` / sentence boundaries. `_rare_terms`
 then picks what is actually selective by document frequency and drops `df == 0` tokens, which
 would otherwise make their AND unsatisfiable. Path A relaxes 4-term AND → 2-term AND → OR
 before giving up. Structured includes still read `positive_constraints` for
 material/color/brand.
+- `snippets.py` — shared by retrieval and rerank: `disclosure_snippets(state)` (above) and
+`tokens()`. Split out so the query that *ranks* a candidate is the query that *found* it; the
+simulator quotes the target's own `features` / `details` back at us, so a snippet is often a
+verbatim substring of the target row and of almost nothing else.
 - `rerank.py` — `rerank(candidates, state, plan, products)` scores every pooled
 `parent_asin` with the additive `score_product`: **+** carried retrieval score, exact-phrase
-hits (title/features/details), field-weighted token overlap, per-attribute containment (hard
+hits (title/features/details; matched punctuation-insensitively via `_canonical`, since the
+simulator writes a detail as `key: value` and `_field_map` flattens it to `key value`),
+`_snippet_coverage` (per clue, `_COVERAGE_WEIGHT=6.0` × the share of its tokens found — partial
+credit where the exact phrase is all-or-nothing, e.g. clues truncated at 180 chars),
+field-weighted token overlap (required + snippet + optional terms), per-attribute containment (hard
 attributes > soft), preference-tag bonus, rating/review tie-break; **−** excluded-term
 contradiction, color/material mismatch, budget violation (`maximum` over cap / `around` off
 by >35%), and a demotion for items rejected after a "not quite right" turn. `agent.py`
@@ -152,51 +158,88 @@ pool?) over the public set. It replays the evaluator's own `initial_message` /
 `customer_reply` turns through the real `parse_message` + `SessionStore`, so parser losses
 are visible; the stand-in agent always asks `other` (never excluded by
 `classify_constraint`), making these an upper bound over question policies only. Latest
-(verbatim-snippet retrieval): `pool=200` → **0.975** fully disclosed, **0.620** with only the
-turn-1 message. Before the verbatim change the same harness read 0.860 / 0.575, so feeding raw
-turn text recovered nearly all of the parser's recall loss.
+(re-run 2026-08-30, post-`7e7aa0e`): `pool=200` → **0.985** fully disclosed, **0.625** with only
+the turn-1 message. Before the verbatim-snippet change the same harness read 0.860 / 0.575, so
+feeding raw turn text recovered nearly all of the parser's recall loss. These numbers are a
+property of retrieval only — the snippets-into-rerank change below does not touch them.
 
 | pool | disclose | recall | boundary | browsing | buying | intent_override |
-|---|---|---|---|---|---|---|
-| 100 | first | 0.455 | 0.40 | 0.36 | 0.54 | 0.50 |
-| 100 | all | 0.950 | 1.00 | 1.00 | 0.97 | 0.73 |
-| 200 | first | 0.620 | 0.40 | 0.46 | 0.80 | 0.63 |
-| 200 | all | 0.975 | 1.00 | 1.00 | 0.99 | 0.87 |
-| 400 | first | 0.630 | 0.40 | 0.46 | 0.82 | 0.63 |
-| 400 | all | 0.980 | 1.00 | 1.00 | 0.99 | 0.90 |
+| ---- | -------- | ------ | -------- | -------- | ------ | --------------- |
+| 100  | first    | 0.425  | 0.40     | 0.36     | 0.46   | 0.50            |
+| 100  | all      | 0.935  | 1.00     | 0.96     | 0.96   | 0.77            |
+| 200  | first    | 0.625  | 0.40     | 0.46     | 0.81   | 0.63            |
+| 200  | all      | 0.985  | 1.00     | 1.00     | 0.99   | 0.93            |
+| 400  | first    | 0.630  | 0.40     | 0.46     | 0.82   | 0.63            |
+| 400  | all      | 0.990  | 1.00     | 1.00     | 0.99   | 0.97            |
 
-### Local score (2026-08-29, full public set, `python3 -m evaluator.local_evaluator`)
 
-Aggregate: **HitRate@10 0.790 · MRR 0.458 · MTTC 4.64 · Efficiency 0.637 · TechnicalScore
-0.660** (previous pipeline 0.450 / 0.191 / 7.71 / 0.330 / 0.348; weak-BM25 baseline 0.125 /
-0.068 / 9.81 / — / 0.107). Token usage 0 (pure stdlib). Run takes ~42s.
 
-| Scenario | n | Hit@10 | MRR | MTTC |
-|---|---|---|---|---|
-| boundary | 10 | 0.800 | 0.620 | 5.00 |
-| browsing | 80 | 0.913 | 0.506 | 4.08 |
-| buying | 80 | 0.738 | 0.409 | 4.34 |
-| intent_override | 30 | 0.600 | 0.404 | 6.80 |
 
-Reads: `intent_override` is still the weak spot (override wipes all constraints but
-`category`, can't score before turn 3–4), though it moved 0.333 → 0.600. `buying` < `browsing`
-persists (0.738 vs 0.913) but is **no longer a pool problem** — recall at full disclosure is
-0.99 for buying, so the remaining gap is rerank ordering on the sessions whose hard constraint
-arrives inside the turn-1 opener. Raising `CANDIDATE_POOL_SIZE` 150 → 200 was measured and
-changed nothing (0.65951 vs 0.65956), so the misses are not targets sitting just outside the
-pool.
+### Local score (2026-08-30, full public set, `python3 -m evaluator.local_evaluator`)
+
+Aggregate: **HitRate@10 0.945 · MRR 0.572 · MTTC 3.690 · Efficiency 0.731 · TechnicalScore
+0.790** (prior 0.930 / 0.560 / 4.055 / 0.694 / 0.772; before that 0.920 / 0.561 / 4.11 / 0.689 /
+0.766; 0.915 / 0.552 / 4.31 / 0.669 / 0.757; 0.790 / 0.458 / 4.64 / 0.637 / 0.660; pre-pipeline
+0.450 / 0.191 / 7.71 / 0.330 / 0.348; weak-BM25 baseline 0.125 / 0.068 / 9.81 / — / 0.107).
+Token usage 0 (pure stdlib). Run takes ~39s.
+
+Four recent moves:
+
+- `0.660 → 0.757` — the `questions.py` clarification-policy rewrite (commit `81fd7cd`):
+`EMPTY_INTENT_PRIORITY` / `ACTIVE_INTENT_PRIORITY` lead with `feature`, `other` appended as a terminal catch-all. Mostly `buying` (0.738 → 0.950).
+- `0.757 → 0.766` — the override rework (commit `40c01e6`): `SessionStore._apply_override`
+clears only the attribute(s) the customer is actually replacing (was: wipe everything but
+`category`), demotes the replaced value to a `negative_constraint`, leaves the replaced
+attribute *not* marked disclosed so `questions.py` can ask a direct follow-up, and `rerank`
+applies a 1.5× `_override_boost` to the post-override exact-phrase score. Falls back to the
+old full wipe when the override turn parses to nothing. Fires only on `override` turns, so
+the other three scenarios are byte-identical.
+- `0.766 → 0.772` — retrieval pool-ordering fix (commit `7e7aa0e`): `get_candidates` sorts the
+pool cutoff by `(_PATH_TIER, path count, fts_score)` instead of `(path count, fts_score)`, so a
+genuine conjunctive match (`core` / `rare_and`) can't be evicted from the 150-item pool by a
+loosely-matched broad-OR hit (`category` / `bm25_all`) whose raw BM25 merely runs higher; plus
+a single-term Path A snippet (bare override reply like "polyester") now falls back to a bare
+term match instead of zero hits. Lifted `browsing` Hit 0.938 → 0.950 and `intent_override` Hit
+0.800 → 0.833; `buying` / `boundary` byte-identical.
+- `0.772 → 0.790` — rerank now reads the verbatim snippets (docs gaps 1–2): snippet extraction
+moved to `components/snippets.py`; `exact_phrases_for_state` returns those snippets on *every*
+turn instead of the whole boilerplate-laden message (which could never substring-match a field,
+so the phrase bonus had been ~dead weight); `plan.snippet_terms` folded into `_token_overlap`;
+`_canonical` punctuation-insensitive phrase matching; new `_snippet_coverage`. Contributions,
+cumulative: phrases 0.778, + snippet terms 0.783, + coverage 0.790. `_COVERAGE_WEIGHT` is flat
+over ~5–12 and degrades at 20; ships at 6.0. Zeroing `_phrase_score` on top of coverage costs
+0.009, so both terms earn their place. Lifted `boundary` Hit 0.900 → 1.000, `browsing` 0.950 →
+0.975; `intent_override` unmoved.
+
+
+| Scenario        | n   | Hit@10 | MRR   | MTTC | (prior)              |
+| --------------- | --- | ------ | ----- | ---- | -------------------- |
+| boundary        | 10  | 1.000  | 0.613 | 5.00 | 0.900 / 0.630 / 5.10 |
+| browsing        | 80  | 0.975  | 0.567 | 3.11 | 0.950 / 0.518 / 3.45 |
+| buying          | 80  | 0.950  | 0.553 | 3.45 | 0.950 / 0.575 / 4.00 |
+| intent_override | 30  | 0.833  | 0.619 | 5.43 | 0.833 / 0.610 / 5.47 |
+
+
+Reads: the snippet change was aimed at MRR but cashed out mostly as Hit and MTTC (−0.37 turns
+aggregate) — the verbatim clues pull the target *into* the Top 10 earlier more readily than they
+pull it to rank 1. `buying` MRR actually slipped (0.575 → 0.553) while its MTTC dropped 0.55
+turns, i.e. it now hits sooner but lands slightly lower in the list. `intent_override` (0.833) is
+untouched and is now clearly the weakest scenario: `disclosure_snippets` hard-cuts everything
+before the override turn, so rerank — not just retrieval — throws away still-valid pre-override
+clues (docs gap 3, the next target). Remaining headroom overall is still MRR: 0.572 against a
+0.945 hit rate means targets land mid-list, not at rank 1.
 
 Open items:
 
 - Recompute the local score after any pipeline change; `results.json` from this run is the
 current reference (still gitignored).
-- Investigate `buying` rerank ordering (see above) — `search_plan.exact_phrases` is the whole
-normalized turn text including boilerplate (`i'm looking for shirts. a key requirement is:
-…`), which can never phrase-match a product field, so the exact-phrase bonus in `rerank` is
-likely dead weight on exactly the buying opener. Reuse `_disclosure_snippets`-style stripping
-there.
-- Tune `questions.py` — `classify_constraint` catch-alls to `feature`, so asking `feature` /
-`other` is usually the highest-yield.
+- `intent_override` (0.833) is the lowest scenario — the turn 3–4 scoring gate caps how low
+MTTC can go, but the pre-override snippet hard-cut (docs gap 3) is a real fixable loss and is
+the next target.
+- `_quality_tiebreak` and the raw carried `retrieval_score` have never been sensitivity-checked
+against the (now much larger) snippet signals — cheap experiment, docs gap 6.
+- The "avoid repeated asks" guard in `choose_question_attribute` only re-adds
+`last_asked_attribute` to `excluded` when it is *already* excluded — currently a no-op.
 - `CandidateIndex` build is ~40s and uncached; consider persisting the FTS DB + df table.
 
 

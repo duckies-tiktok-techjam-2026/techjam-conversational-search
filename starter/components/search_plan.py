@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .models import SearchPlan, SessionState
+from .snippets import disclosure_snippets, snippet_terms
 
 
 def build_search_plan(state: SessionState) -> SearchPlan:
@@ -37,16 +38,16 @@ def build_search_plan(state: SessionState) -> SearchPlan:
         excluded_terms=excluded_terms,
         exact_phrases=exact_phrases,
         attribute_values=attribute_values,
+        snippet_terms=snippet_terms(exact_phrases),
     )
 
 
 def exact_phrases_for_state(state: SessionState) -> list[str]:
-    start_index = 0
-    for index, parsed in enumerate(state.parsed_messages):
-        if parsed.override:
-            start_index = index
-    return list(dict.fromkeys(
-        parsed.normalized_text
-        for parsed in state.parsed_messages[start_index:][-2:]
-        if len(parsed.tokens) > 1
-    ))
+    """The same verbatim snippets retrieval searches on -- see components/snippets.py.
+
+    Previously this returned the whole normalized turn text, boilerplate and all
+    ("i'm looking for shirts. a key requirement is: ..."), which could never
+    substring-match a product field, so the strongest positive signal in
+    ``score_product`` was contributing nothing on most turns.
+    """
+    return disclosure_snippets(state)

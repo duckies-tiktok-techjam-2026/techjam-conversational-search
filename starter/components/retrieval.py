@@ -15,17 +15,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .models import SessionState
+from .snippets import disclosure_snippets, tokens as _tokens
 
 # FTS5 columns, in order. parent_asin is UNINDEXED but still counts as a column
 # for bm25() weights, so it gets a 0.0 slot.
 _BM25_WEIGHTS = "0.0, 8.0, 5.0, 3.0, 3.0, 1.0, 0.5"
 
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
-_STOPWORDS = {
-    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is",
-    "it", "of", "on", "or", "the", "to", "with", "your", "you", "this", "that",
-    "made", "quality", "great", "high", "will", "can", "size", "fit",
-}
 _MAX_SNIPPETS = 8
 
 # Raw BM25 scores are not comparable across paths: a short, generic OR query
@@ -36,19 +31,6 @@ _MAX_SNIPPETS = 8
 # conjunctive match from being evicted from the pool by a loosely-matched
 # broad-recall candidate. See README.md for the rationale.
 _PATH_TIER = {"core": 2, "rare_and": 2, "structured": 1, "category": 0, "bm25_all": 0}
-
-# Turns that carry no product information: boundary answers, "nothing more for
-# that attribute" non-answers, and generic negative feedback.
-_NON_ANSWER_RE = re.compile(
-    r"(?:do not|don't|dont) have (?:an?|any)\b[^.]*preference"
-    r"|no preference"
-    r"|use your judgment"
-    r"|not quite right"
-)
-# "i'm looking for men's t-shirts, but i'm still exploring." -> the category is
-# handled by _category_hint; the rest of the opener is filler.
-_OPENER_RE = re.compile(r"^i'?m looking for .*?[,.]\s*")
-_SNIPPET_SPLIT_RE = re.compile(r";|(?<=\.)\s+")
 
 
 @dataclass
@@ -66,14 +48,6 @@ def _text(value: object) -> str:
     if isinstance(value, list):
         return " ".join(str(item) for item in value)
     return str(value)
-
-
-def _tokens(text: str) -> list[str]:
-    return [
-        token
-        for token in _TOKEN_RE.findall(str(text).lower())
-        if len(token) > 1 and token not in _STOPWORDS
-    ]
 
 
 class CandidateIndex:
@@ -140,38 +114,6 @@ class CandidateIndex:
         return sorted(seen, key=lambda token: self.df[token])[:k]
 
     @staticmethod
-    def _disclosure_snippets(state: SessionState) -> list[str]:
-        """Verbatim constraint text the customer actually said, newest turns last.
-
-        The parser only keeps tokens from its fixed vocab lists, so the
-        discriminative part of a disclosure ("4.3 oz", "jersey knit", "tagless")
-        never reaches ``positive_constraints``. Retrieval reads the raw turn text
-        instead and lets ``_rare_terms`` pick what is selective.
-        """
-        parsed_messages = getattr(state, "parsed_messages", None) or []
-        start_index = 0
-        for index, parsed in enumerate(parsed_messages):
-            if parsed.override:
-                start_index = index
-
-        snippets: list[str] = []
-        for index, parsed in enumerate(parsed_messages[start_index:], start=start_index):
-            text = str(parsed.normalized_text or "")
-            if not text or _NON_ANSWER_RE.search(text):
-                continue
-            if ":" in text:
-                payload = text.split(":", 1)[1]
-            elif index == 0:
-                continue
-            else:
-                payload = _OPENER_RE.sub("", text)
-            for part in _SNIPPET_SPLIT_RE.split(payload):
-                part = part.strip(" .,-")
-                if _tokens(part):
-                    snippets.append(part)
-        return list(dict.fromkeys(snippets))
-
-    @staticmethod
     def _category_hint(state: SessionState) -> str:
         hint = getattr(state, "category_hint", None)
         if hint:
@@ -196,7 +138,10 @@ class CandidateIndex:
 
         # Snippets are verbatim customer text; structured values come from the
         # parser, which is reliable for the closed vocabularies it does cover.
-        snippets = self._disclosure_snippets(state)
+        # They live in components/snippets.py because rerank scores against the
+        # same text -- ranking on a thinner query than the one that found the
+        # candidate is what buried correct hits mid-list.
+        snippets = disclosure_snippets(state)
         structured = [
             constraint.value
             for attribute in ("material", "color", "brand")
