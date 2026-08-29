@@ -11,8 +11,8 @@ class QuestionsTest(unittest.TestCase):
     def setUp(self) -> None:
         self.state = SessionStore().reset("session", {})
 
-    def test_empty_state_starts_with_category(self) -> None:
-        self.assertEqual(choose_question_attribute(self.state, 1), "category")
+    def test_empty_state_starts_with_feature(self) -> None:
+        self.assertEqual(choose_question_attribute(self.state, 1), "feature")
 
     def test_active_intent_prioritizes_feature(self) -> None:
         self.state.positive_constraints["material"] = parse_message("leather").constraints
@@ -31,7 +31,7 @@ class QuestionsTest(unittest.TestCase):
     def test_returns_none_when_all_question_attributes_are_exhausted(self) -> None:
         self.state.asked_attributes.update({
             "category", "use_case", "feature", "material", "color",
-            "size", "style", "brand", "budget",
+            "size", "style", "brand", "budget", "other",
         })
 
         self.assertIsNone(choose_question_attribute(self.state, 10))
