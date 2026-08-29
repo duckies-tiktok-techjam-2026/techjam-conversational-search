@@ -49,14 +49,18 @@ class SearchPlanTest(unittest.TestCase):
         self.assertNotIn("color", plan.required_terms)
         self.assertEqual(plan.required_terms, ["leather", "boots"])
 
-    def test_override_state_drops_stale_values(self) -> None:
+    def test_override_state_drops_only_the_replaced_attribute(self) -> None:
         self.store.update(self.state, "black leather", parse_message("black leather"))
         self.store.update(self.state, "Actually cotton", parse_message("Actually cotton"))
 
         plan = build_search_plan(self.state)
 
-        self.assertEqual(plan.required_terms, ["cotton"])
+        # Override text only names material (cotton), so color (black) survives
+        # as a required term; the stale material value moves to excluded_terms
+        # instead of just disappearing.
+        self.assertEqual(plan.required_terms, ["black", "cotton"])
         self.assertNotIn("leather", plan.required_terms)
+        self.assertEqual(plan.excluded_terms, ["leather"])
         self.assertEqual(plan.exact_phrases, ["actually cotton"])
 
 

@@ -186,13 +186,28 @@ def _quality_tiebreak(product: Mapping[str, object]) -> float:
 
 
 def _feedback_penalty(parent_asin: str, state: SessionState) -> float:
-    if not state.parsed_messages or not state.parsed_messages[-1].generic_feedback:
+    if not state.parsed_messages:
+        return 0.0
+    last = state.parsed_messages[-1]
+    if not (last.generic_feedback or last.override):
         return 0.0
     try:
         rank = state.last_recommendations.index(parent_asin)
     except ValueError:
         return 0.0
     return 1.5 - (0.1 * rank)
+
+
+def _override_boost(state: SessionState) -> float:
+    """Weight the freshest (post-override) exact-phrase signal more heavily.
+
+    plan.exact_phrases is already scoped to text since the last override
+    (search_plan.exact_phrases_for_state), so this only amplifies terms the
+    customer just gave as their replacement intent -- not stale ones.
+    """
+    if state.parsed_messages and state.parsed_messages[-1].override:
+        return 1.5
+    return 1.0
 
 
 def score_product(
@@ -206,7 +221,7 @@ def score_product(
     query_terms = list(dict.fromkeys([*plan.required_terms, *plan.optional_terms]))
     return (
         retrieval_score
-        + _phrase_score(fields, plan.exact_phrases)
+        + _override_boost(state) * _phrase_score(fields, plan.exact_phrases)
         + _token_overlap(fields, query_terms)
         + _attribute_score(fields, plan, unconstrained)
         + _optional_score(fields, plan.optional_terms)

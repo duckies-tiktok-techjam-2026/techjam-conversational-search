@@ -47,16 +47,9 @@ class SessionStore:
         state.messages.append(user_message)
         state.parsed_messages.append(parsed)
 
+        overridden_attrs: set[str] = set()
         if parsed.override:
-            state.positive_constraints = {
-                "category": list(state.positive_constraints.get("category", [])),
-            }
-            state.negative_constraints = {
-                "category": list(state.negative_constraints.get("category", [])),
-            }
-            state.disclosed_attributes = {
-                attribute for attribute in state.disclosed_attributes if attribute == "category"
-            }
+            overridden_attrs = self._apply_override(state, parsed)
             state.override_count += 1
 
         if parsed.boundary:
@@ -69,8 +62,61 @@ class SessionStore:
                 state.disclosed_attributes.add(constraint.attribute)
                 state.unconstrained_attributes.discard(constraint.attribute)
 
+        # An override reply is often a single bare value (e.g. "cotton"), not the
+        # full detail (e.g. "90% Cotton, 10% Others") -- both file under the same
+        # attribute downstream. Don't treat the replaced attribute as fully
+        # answered, so questions.py can ask a direct follow-up instead of only
+        # reaching the fuller value via the last-resort "other" question.
+        state.disclosed_attributes -= overridden_attrs
+
         state.query_text = self._build_query_text(state)
         return state
+
+    @staticmethod
+    def _apply_override(state: SessionState, parsed: ParsedMessage) -> set[str]:
+        """Clear only the attribute(s) the customer is actually replacing.
+
+        The override turn's own text is parsed for constraints just like any other
+        turn, so the replacement attribute (e.g. "feature") is already known. Wipe
+        prior positive/negative constraints for just that attribute, demote its old
+        value(s) to negative_constraints so rerank actively avoids them, and only
+        fall back to a full wipe (old behavior) when the parser found nothing to
+        anchor the override to.
+        """
+        new_values_by_attr: dict[str, set[str]] = {}
+        for constraint in parsed.constraints:
+            new_values_by_attr.setdefault(constraint.attribute, set()).add(constraint.value)
+        overridden_attrs = {attribute for attribute in new_values_by_attr if attribute != "category"}
+
+        if not overridden_attrs:
+            state.positive_constraints = {
+                "category": list(state.positive_constraints.get("category", [])),
+            }
+            state.negative_constraints = {
+                "category": list(state.negative_constraints.get("category", [])),
+            }
+            state.disclosed_attributes = {
+                attribute for attribute in state.disclosed_attributes if attribute == "category"
+            }
+            state.asked_attributes = {
+                attribute for attribute in state.asked_attributes if attribute == "category"
+            }
+            return set()
+
+        for attribute in overridden_attrs:
+            old_positive = state.positive_constraints.pop(attribute, [])
+            state.negative_constraints.pop(attribute, None)
+            state.disclosed_attributes.discard(attribute)
+            state.asked_attributes.discard(attribute)
+            for old_constraint in old_positive:
+                if old_constraint.value in new_values_by_attr.get(attribute, set()):
+                    continue
+                SessionStore._add_constraint(
+                    state,
+                    Constraint(attribute, old_constraint.value, "negative", old_constraint.confidence),
+                )
+
+        return overridden_attrs
 
     @staticmethod
     def _add_constraint(state: SessionState, constraint: Constraint) -> None:
