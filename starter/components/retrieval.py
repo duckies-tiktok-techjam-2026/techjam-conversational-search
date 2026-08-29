@@ -28,6 +28,15 @@ _STOPWORDS = {
 }
 _MAX_SNIPPETS = 8
 
+# Raw BM25 scores are not comparable across paths: a short, generic OR query
+# (e.g. "category") concentrates BM25's IDF term over fewer words and can
+# numerically outscore a candidate that satisfied a tighter, multi-clause AND
+# (e.g. "core") even though the AND is much stronger evidence of relevance.
+# Tiering paths by specificity before comparing scores keeps a genuine
+# conjunctive match from being evicted from the pool by a loosely-matched
+# broad-recall candidate. See README.md for the rationale.
+_PATH_TIER = {"core": 2, "rare_and": 2, "structured": 1, "category": 0, "bm25_all": 0}
+
 # Turns that carry no product information: boundary answers, "nothing more for
 # that attribute" non-answers, and generic negative feedback.
 _NON_ANSWER_RE = re.compile(
@@ -208,8 +217,14 @@ class CandidateIndex:
                 hits = self._match(" AND ".join(f'"{t}"' for t in terms[:width]), 80)
                 if len(hits) >= 5:
                     break
-            if len(hits) < 5 and len(terms) > 1:
-                hits = self._match(" OR ".join(f'"{t}"' for t in terms), 80)
+            # A single-term snippet (e.g. a bare override reply like "polyester")
+            # never satisfies width <= len(terms) above, so it would otherwise
+            # fall through with zero hits despite being a perfectly valid match.
+            if len(hits) < 5:
+                if len(terms) > 1:
+                    hits = self._match(" OR ".join(f'"{t}"' for t in terms), 80)
+                else:
+                    hits = self._match(f'"{terms[0]}"', 80)
             add("rare_and", hits)
 
         # Path C -- conjunctive core: AND every known clue, relax if too strict.
@@ -255,7 +270,11 @@ class CandidateIndex:
 
         ordered = sorted(
             pool.values(),
-            key=lambda candidate: (len(candidate.paths), candidate.fts_score),
+            key=lambda candidate: (
+                max(_PATH_TIER.get(path, 0) for path in candidate.paths),
+                len(candidate.paths),
+                candidate.fts_score,
+            ),
             reverse=True,
         )
         return ordered[:pool_size]

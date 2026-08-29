@@ -73,6 +73,8 @@ customer message -> parse_message() -> SessionStore.update() -> build_search_pla
 
 Its lexical paths read the **verbatim** customer text (`parsed_messages[i].normalized_text`) rather than the parser's `Constraint` values, because the parser only keeps tokens from its fixed vocabularies and would drop the discriminative part of a disclosure (`4.3 oz`, `jersey knit`, `tagless`). `_disclosure_snippets` takes the turns from the last override onward, strips boilerplate and no-information turns, and splits them into snippets; `_rare_terms` then selects the most selective tokens by document frequency. `positive_constraints` is still the source for structured material/color/brand includes.
 
+**Design choice: path specificity outranks raw BM25 score at the pool cutoff.** `get_candidates` unions several retrieval paths (`core`, `rare_and`, `structured`, `category`, `bm25_all`) that run structurally different SQL — a tight, multi-clause AND (`core`, `rare_and`) versus a broad single-field OR meant only to widen recall (`category`, `bm25_all`). Raw BM25 magnitudes are not comparable across those queries: a short, generic OR over a handful of common words concentrates BM25's IDF term and can numerically outscore a candidate that satisfied a real conjunctive match, even though the AND is much stronger evidence of relevance. Sorting the pool cutoff purely by `(len(paths), fts_score)` let exactly that happen — a candidate found only via the coarse `category` OR evicted a candidate that had actually satisfied the full `core` AND of disclosed constraints, dropping the true target out of the 150-item pool despite it being the more relevant match. `_PATH_TIER` fixes this by ranking candidates first by the specificity of the *best* path that found them (`(max tier, path count, fts_score)`), so any genuine conjunctive hit outranks a loosely-matched broad-recall hit regardless of raw score.
+
 `rerank.py` turns that pool into the final Top 10. `rerank(candidates, state, plan, products)` scores every pooled `parent_asin` with a deterministic additive model in `score_product` and returns them best-first. Positive signals: the retrieval score carried from the pool, exact-phrase hits against title/features/details, field-weighted token overlap, per-attribute containment (hard attributes weighted above soft ones), profile preference-tag bonuses, and a rating/review-count tie-break. Penalties: excluded-term contradictions, color/material mismatch, budget violations (`maximum` over cap, `around` off by more than 35%), and a feedback penalty that demotes items the customer rejected after a "not quite right" turn. It consumes the `SearchPlan`, the `SessionState`, and the in-memory catalog map that `agent.py` loads in `__init__`. `agent.py` wires the two together with `CANDIDATE_POOL_SIZE = 150` and remains responsible for response formatting.
 
 Validate the package import and component tests with:
@@ -90,8 +92,8 @@ python3 -m scripts.recall_check
 
 The frozen weak-BM25 reference scores Hit Rate@10 `0.125`, MRR `0.068034`, and
 MTTC `9.81` on the released public set (`docs/baseline_results.json`) — the target
-to beat, not the current pipeline. The current pipeline scores Hit Rate@10 `0.790`,
-MRR `0.458`, MTTC `4.64`, Technical Score `0.660`.
+to beat, not the current pipeline. The current pipeline scores Hit Rate@10 `0.930`,
+MRR `0.560`, MTTC `4.055`, Technical Score `0.772`.
 
 ## Agent Interface
 
