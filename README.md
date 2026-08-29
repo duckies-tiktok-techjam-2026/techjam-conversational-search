@@ -71,9 +71,11 @@ customer message -> parse_message() -> SessionStore.update() -> build_search_pla
 
 `retrieval.py` owns the **candidate pool**: `CandidateIndex` builds an in-memory SQLite FTS5 index plus a document-frequency table once in `__init__`, and `get_candidates(state, pool_size=200)` returns up to `pool_size` `Candidate` records by unioning several retrieval paths. Each candidate carries per-path BM25 ranks; pool truncation orders by weighted reciprocal-rank fusion (`rare_and` weighted highest) rather than raw BM25 magnitude.
 
-Its lexical paths read the **verbatim** customer text (`parsed_messages[i].normalized_text`) rather than the parser's `Constraint` values, because the parser only keeps tokens from its fixed vocabularies and would drop the discriminative part of a disclosure (`4.3 oz`, `jersey knit`, `tagless`). `_disclosure_snippets` takes the turns from the last override onward, strips boilerplate and no-information turns, and splits them into snippets; `_rare_terms` then selects the most selective tokens by document frequency. `positive_constraints` is still the source for structured material/color/brand includes.
+Its lexical paths read the **verbatim** customer text (`parsed_messages[i].normalized_text`) rather than the parser's `Constraint` values, because the parser only keeps tokens from its fixed vocabularies and would drop the discriminative part of a disclosure (`4.3 oz`, `jersey knit`, `tagless`). `disclosure.py` takes the turns from the last override onward, strips boilerplate and no-information turns, and splits them into snippets; `_rare_terms` then selects the most selective tokens by document frequency. `positive_constraints` is still the source for structured material/color/brand includes.
 
-`rerank.py` turns that pool into the final Top 10. `rerank(candidates, state, plan, products)` scores every pooled `parent_asin` with a deterministic additive model in `score_product` and returns them best-first. The retrieval contribution is a **pool-local min-max prior** scaled to at most 9 points (not the raw BM25 magnitude, which could reach 224 and drown every constraint signal). Positive signals: bounded retrieval prior, exact-phrase hits against title/features/details, field-weighted token overlap, per-attribute containment (hard attributes weighted above soft ones), profile preference-tag bonuses, and a rating/review-count tie-break. Penalties: excluded-term contradictions, color/material mismatch, budget violations (`maximum` over cap, `around` off by more than 35%), and a feedback penalty that demotes items the customer rejected after a "not quite right" turn. It consumes the `SearchPlan`, the `SessionState`, and the in-memory catalog map that `agent.py` loads in `__init__`. `agent.py` wires the two together with `CANDIDATE_POOL_SIZE = 150` and remains responsible for response formatting.
+`search_plan.py` builds the rerank inputs, including `exact_phrases`: the same stripped disclosure snippets (>=2 tokens, colon-normalized) so phrase bonuses match target `features`/`details` rather than dead boilerplate turn text.
+
+`rerank.py` turns that pool into the final Top 10. `rerank(candidates, state, plan, products)` scores every pooled `parent_asin` with a deterministic additive model in `score_product` and returns them best-first. The retrieval contribution is a **pool-local min-max prior** scaled to at most 9 points; exact-phrase hits are scaled by `PHRASE_WEIGHT = 2.0`. Positive signals: bounded retrieval prior, exact-phrase hits against title/features/details, field-weighted token overlap, per-attribute containment (hard attributes weighted above soft ones), profile preference-tag bonuses, and a rating/review-count tie-break. Penalties: excluded-term contradictions, color/material mismatch, budget violations (`maximum` over cap, `around` off by more than 35%), and a feedback penalty that demotes items the customer rejected after a "not quite right" turn. It consumes the `SearchPlan`, the `SessionState`, and the in-memory catalog map that `agent.py` loads in `__init__`. `agent.py` wires the two together with `CANDIDATE_POOL_SIZE = 150` and remains responsible for response formatting.
 
 Validate the package import and component tests with:
 
@@ -87,12 +89,13 @@ Measure candidate-pool recall (does the pool contain the target?) with:
 ```bash
 python3 -m scripts.recall_check
 python3 -m scripts.score_ablation
+python3 -m scripts.score_ablation --phrases
 ```
 
 The frozen weak-BM25 reference scores Hit Rate@10 `0.125`, MRR `0.068034`, and
 MTTC `9.81` on the released public set (`docs/baseline_results.json`) — the target
-to beat, not the current pipeline. The current pipeline scores Hit Rate@10 `0.805`,
-MRR `0.405`, MTTC `4.58`, Technical Score `0.652`.
+to beat, not the current pipeline. The current pipeline scores Hit Rate@10 `0.850`,
+MRR `0.489`, MTTC `4.11`, Technical Score `0.710`.
 
 ## Agent Interface
 

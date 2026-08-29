@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+import re
+
+from .disclosure import disclosure_snippets, disclosure_tokens
 from .models import SearchPlan, SessionState
+
+# Ablation knob (mutated by scripts/score_ablation.py --phrases).
+STRIPPED_EXACT_PHRASES = True
+_MAX_EXACT_PHRASES = 8
+_COLON_NORM_RE = re.compile(r"\s*:\s*")
 
 
 def build_search_plan(state: SessionState) -> SearchPlan:
@@ -40,7 +48,7 @@ def build_search_plan(state: SessionState) -> SearchPlan:
     )
 
 
-def exact_phrases_for_state(state: SessionState) -> list[str]:
+def _legacy_exact_phrases(state: SessionState) -> list[str]:
     start_index = 0
     for index, parsed in enumerate(state.parsed_messages):
         if parsed.override:
@@ -50,3 +58,18 @@ def exact_phrases_for_state(state: SessionState) -> list[str]:
         for parsed in state.parsed_messages[start_index:][-2:]
         if len(parsed.tokens) > 1
     ))
+
+
+def exact_phrases_for_state(state: SessionState) -> list[str]:
+    if not STRIPPED_EXACT_PHRASES:
+        return _legacy_exact_phrases(state)
+
+    phrases: list[str] = []
+    for snippet in disclosure_snippets(state):
+        if len(disclosure_tokens(snippet)) < 2:
+            continue
+        phrases.append(snippet)
+        normalized = _COLON_NORM_RE.sub(" ", snippet).strip()
+        if normalized and normalized != snippet:
+            phrases.append(normalized)
+    return list(dict.fromkeys(phrases))[:_MAX_EXACT_PHRASES]

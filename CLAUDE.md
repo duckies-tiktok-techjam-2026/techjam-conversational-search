@@ -121,7 +121,12 @@ is now used for what it is good at — the closed vocabularies (material/color/b
 `override` (clear soft prefs, keep category) and `boundary` (mark attribute unconstrained)
 transitions.
 - `search_plan.py` — `build_search_plan(state) -> SearchPlan` with `required_terms`,
-`optional_terms`, `excluded_terms`, `exact_phrases`, `attribute_values`.
+`optional_terms`, `excluded_terms`, `exact_phrases`, `attribute_values`. `exact_phrases`
+reuse the same boilerplate-stripped snippets as retrieval via `disclosure.py` (>=2 tokens,
+colon-normalized variant, cap 8) so the rerank phrase bonus matches target `features`/`details`.
+- `disclosure.py` — shared `disclosure_snippets(state)` used by retrieval and search_plan:
+verbatim turn text from the last override onward, `_NON_ANSWER_RE` filtered, payload after
+`:`, opener skipped at index 0, split on `;` / sentences.
 - `retrieval.py` — `CandidateIndex`: builds an in-memory FTS5 index + a token
 document-frequency table in `__init__`; `get_candidates(state, pool_size=200)` unions three
 paths — rare-term AND per snippet, conjunctive core (AND all clues, drop least-selective
@@ -129,8 +134,7 @@ clause if too strict, broad-OR fallback), category/material includes — and ret
 `Candidate(parent_asin, paths, path_ranks, fts_score, rrf_score)`, loosely ordered by
 `(len(paths), rrf_score, fts_score)` where `rrf_score` is a weighted reciprocal-rank fusion
 over per-path BM25 ranks (`rare_and` > `core` > `structured` > `category` > `bm25_all`).
-Snippets come from
-`_disclosure_snippets(state)`: the **verbatim** `parsed_messages[i].normalized_text` from the
+Snippets come from `disclosure_snippets(state)` in `disclosure.py`: the **verbatim** `parsed_messages[i].normalized_text` from the
 last override onward, minus boilerplate (leading `I'm looking for …` opener, text before the
 `:` lead-in) and minus no-information turns (`_NON_ANSWER_RE`: boundary answers, "no
 additional preference", "not quite right"), split on `;` / sentence boundaries. `_rare_terms`
@@ -142,12 +146,14 @@ material/color/brand.
 `parent_asin` with the additive `score_product`. The carried retrieval signal is **not** the raw
 BM25 magnitude (spread up to 224 points within one pool, which drowned every hand-crafted
 signal and penalty); `rerank()` min-max normalizes `retrieval_score` across the pool to
-[0, 1] and scales by `RETRIEVAL_WEIGHT = 9.0` before adding it. **+** bounded retrieval
-prior, exact-phrase hits (title/features/details), field-weighted token overlap, per-attribute
-containment (hard attributes > soft), preference-tag bonus, rating/review tie-break; **−**
-excluded-term contradiction, color/material mismatch, budget violation (`maximum` over cap /
-`around` off by >35%), and a demotion for items rejected after a "not quite right" turn.
-`scripts/score_ablation.py` sweeps prior modes for tuning. `agent.py` wires the pool at
+[0, 1] and scales by `RETRIEVAL_WEIGHT = 9.0` before adding it. Exact-phrase hits are scaled
+by `PHRASE_WEIGHT = 2.0` (ablation: dead boilerplate phrases matched 0/200 targets; stripped
+snippets + pw=2 lifted MRR 0.405 → 0.489). **+** bounded retrieval prior, exact-phrase hits
+(title/features/details), field-weighted token overlap, per-attribute containment (hard
+attributes > soft), preference-tag bonus, rating/review tie-break; **−** excluded-term
+contradiction, color/material mismatch, budget violation (`maximum` over cap / `around` off
+by >35%), and a demotion for items rejected after a "not quite right" turn.
+`scripts/score_ablation.py` sweeps prior and phrase weights. `agent.py` wires the pool at
 `CANDIDATE_POOL_SIZE = 150` and forwards `path_ranks` for optional RRF rerank experiments.
 - `questions.py` — unchanged from the starter (static priority lists). Question targeting
 drives what the simulator discloses, so this matters and is not yet tuned.
@@ -172,36 +178,31 @@ are visible; the stand-in agent always asks `other` (never excluded by
 | 400  | all      | 0.980  | 1.00     | 1.00     | 0.99   | 0.90            |
 
 Dev tool: `python3 -m scripts.score_ablation` — one Agent build, then re-runs the public-set
-evaluator while mutating retrieval-prior knobs in `rerank.py`. Used to pick minmax w=9 over
-raw (Hit@10 0.805 vs 0.790, buying 0.788 vs 0.738); RRF rerank did not beat minmax on
-TechnicalScore, so RRF is pool-ordering only.
+evaluator while mutating knobs in `rerank.py` / `search_plan.py`. Prior ablation picked
+minmax w=9 over raw; phrase ablation picked stripped snippets + `PHRASE_WEIGHT=2.0` at
+`RETRIEVAL_WEIGHT=9` (Hit@10 0.850, MRR 0.489 vs dead phrases 0.805 / 0.405).
 
 ### Local score (2026-08-29, full public set, `python3 -m evaluator.local_evaluator`)
 
-Aggregate: **HitRate@10 0.805 · MRR 0.405 · MTTC 4.58 · Efficiency 0.643 · TechnicalScore
-0.652** (verbatim retrieval only 0.790 / 0.458 / 4.64 / 0.637 / 0.660; weak-BM25 baseline
-0.125 / 0.068 / 9.81 / — / 0.107). Token usage 0 (pure stdlib). Run takes ~73s.
+Aggregate: **HitRate@10 0.850 · MRR 0.489 · MTTC 4.11 · Efficiency 0.689 · TechnicalScore
+0.710** (bounded prior only 0.805 / 0.405 / 4.58 / 0.643 / 0.652; weak-BM25 baseline 0.125 /
+0.068 / 9.81 / — / 0.107). Token usage 0 (pure stdlib). Run takes ~36s.
 
 | Scenario        | n   | Hit@10 | MRR   | MTTC |
 | --------------- | --- | ------ | ----- | ---- |
-| boundary        | 10  | 0.800  | 0.494 | 4.50 |
-| browsing        | 80  | 0.875  | 0.457 | 4.36 |
-| buying          | 80  | 0.788  | 0.351 | 4.01 |
-| intent_override | 30  | 0.667  | 0.379 | 6.67 |
+| boundary        | 10  | 0.800  | 0.578 | 4.50 |
+| browsing        | 80  | 0.925  | 0.608 | 3.98 |
+| buying          | 80  | 0.838  | 0.406 | 3.34 |
+| intent_override | 30  | 0.700  | 0.363 | 6.37 |
 
-Reads: bounding the retrieval prior (minmax × 9) lifted Hit@10 and **buying** (0.738 → 0.788)
-at the cost of some MRR (0.458 → 0.405) — constraint signals and penalties can now move the
-needle because the prior is capped at 9 points, not 224. RRF per-path ranks improved pool
-truncation (`rare_and`-first) but RRF-as-rerank-prior did not beat minmax. `intent_override`
-moved 0.600 → 0.667. Remaining headroom: `search_plan.exact_phrases` still carries turn
-boilerplate on buying openers, so the +5 title phrase bonus rarely fires there.
+Reads: stripping boilerplate from `exact_phrases` turned a dead signal (0/200 phrase matches)
+into a target fingerprint — MRR +0.08, Hit@10 +0.045, buying 0.788 → 0.838, intent_override
+0.667 → 0.700. Combined with the capped retrieval prior, TechnicalScore moved 0.652 → 0.710.
 
 Open items:
 
 - Recompute the local score after any pipeline change; `results.json` from this run is the
 current reference (still gitignored).
-- Strip boilerplate from `exact_phrases_for_state` the way `_disclosure_snippets` does, so the
-rerank phrase bonus fires on buying openers.
 - Tune `questions.py` — `classify_constraint` catch-alls to `feature`, so asking `feature` /
 `other` is usually the highest-yield.
 - `CandidateIndex` build is ~40s and uncached; consider persisting the FTS DB + df table.

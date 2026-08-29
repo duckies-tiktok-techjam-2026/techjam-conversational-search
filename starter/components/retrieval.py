@@ -14,6 +14,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .disclosure import disclosure_snippets
 from .models import SessionState
 
 # FTS5 columns, in order. parent_asin is UNINDEXED but still counts as a column
@@ -27,19 +28,6 @@ _STOPWORDS = {
     "made", "quality", "great", "high", "will", "can", "size", "fit",
 }
 _MAX_SNIPPETS = 8
-
-# Turns that carry no product information: boundary answers, "nothing more for
-# that attribute" non-answers, and generic negative feedback.
-_NON_ANSWER_RE = re.compile(
-    r"(?:do not|don't|dont) have (?:an?|any)\b[^.]*preference"
-    r"|no preference"
-    r"|use your judgment"
-    r"|not quite right"
-)
-# "i'm looking for men's t-shirts, but i'm still exploring." -> the category is
-# handled by _category_hint; the rest of the opener is filler.
-_OPENER_RE = re.compile(r"^i'?m looking for .*?[,.]\s*")
-_SNIPPET_SPLIT_RE = re.compile(r";|(?<=\.)\s+")
 
 _RRF_K = 15
 _RRF_PATH_WEIGHTS = {
@@ -151,38 +139,6 @@ class CandidateIndex:
         return sorted(seen, key=lambda token: self.df[token])[:k]
 
     @staticmethod
-    def _disclosure_snippets(state: SessionState) -> list[str]:
-        """Verbatim constraint text the customer actually said, newest turns last.
-
-        The parser only keeps tokens from its fixed vocab lists, so the
-        discriminative part of a disclosure ("4.3 oz", "jersey knit", "tagless")
-        never reaches ``positive_constraints``. Retrieval reads the raw turn text
-        instead and lets ``_rare_terms`` pick what is selective.
-        """
-        parsed_messages = getattr(state, "parsed_messages", None) or []
-        start_index = 0
-        for index, parsed in enumerate(parsed_messages):
-            if parsed.override:
-                start_index = index
-
-        snippets: list[str] = []
-        for index, parsed in enumerate(parsed_messages[start_index:], start=start_index):
-            text = str(parsed.normalized_text or "")
-            if not text or _NON_ANSWER_RE.search(text):
-                continue
-            if ":" in text:
-                payload = text.split(":", 1)[1]
-            elif index == 0:
-                continue
-            else:
-                payload = _OPENER_RE.sub("", text)
-            for part in _SNIPPET_SPLIT_RE.split(payload):
-                part = part.strip(" .,-")
-                if _tokens(part):
-                    snippets.append(part)
-        return list(dict.fromkeys(snippets))
-
-    @staticmethod
     def _category_hint(state: SessionState) -> str:
         hint = getattr(state, "category_hint", None)
         if hint:
@@ -210,7 +166,7 @@ class CandidateIndex:
 
         # Snippets are verbatim customer text; structured values come from the
         # parser, which is reliable for the closed vocabularies it does cover.
-        snippets = self._disclosure_snippets(state)
+        snippets = disclosure_snippets(state)
         structured = [
             constraint.value
             for attribute in ("material", "color", "brand")

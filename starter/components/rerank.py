@@ -11,10 +11,11 @@ CANDIDATE_POOL_SIZE = 150
 
 # Pool-local min-max prior over raw fts_score, scaled before entering score_product.
 # Ablation (2026-08-29): minmax w=9 beat raw on Hit@10 (0.805 vs 0.790) and buying
-# (0.787 vs 0.738) while keeping constraints/penalties in range; rrf rerank did not
-# beat minmax on TechnicalScore. Modes below remain for scripts/score_ablation.py.
+# (0.787 vs 0.738). Phrase ablation: stripped exact_phrases + PHRASE_WEIGHT=2.0 at
+# RETRIEVAL_WEIGHT=9 → Hit@10 0.850, MRR 0.489, Tech 0.710 (dead phrases: 0.805/0.405/0.652).
 RETRIEVAL_PRIOR_MODE = "minmax"
 RETRIEVAL_WEIGHT = 9.0
+PHRASE_WEIGHT = 2.0
 PRIOR_ONLY = False
 RRF_K = 15
 
@@ -90,7 +91,7 @@ def _phrase_score(fields: Mapping[str, str], phrases: Sequence[str]) -> float:
             score += 2.5
         elif _contains(fields["description"], phrase):
             score += 1.0
-    return score
+    return score * PHRASE_WEIGHT
 
 
 def _token_overlap(fields: Mapping[str, str], terms: Sequence[str]) -> float:
