@@ -41,12 +41,32 @@ _NON_ANSWER_RE = re.compile(
 _OPENER_RE = re.compile(r"^i'?m looking for .*?[,.]\s*")
 _SNIPPET_SPLIT_RE = re.compile(r";|(?<=\.)\s+")
 
+_RRF_K = 15
+_RRF_PATH_WEIGHTS = {
+    "rare_and": 3.0,
+    "core": 2.0,
+    "structured": 1.5,
+    "category": 1.0,
+    "bm25_all": 0.5,
+}
+
+
+def _rrf_score(path_ranks: dict[str, int]) -> float:
+    return sum(
+        weight / (_RRF_K + rank)
+        for path, rank in path_ranks.items()
+        if rank >= 1
+        for weight in [_RRF_PATH_WEIGHTS.get(path, 1.0)]
+    )
+
 
 @dataclass
 class Candidate:
     parent_asin: str
     paths: set[str] = field(default_factory=set)
     fts_score: float = 0.0
+    path_ranks: dict[str, int] = field(default_factory=dict)
+    rrf_score: float = 0.0
 
 
 def _text(value: object) -> str:
@@ -180,10 +200,13 @@ class CandidateIndex:
         pool: dict[str, Candidate] = {}
 
         def add(path: str, hits: list[tuple[str, float]]) -> None:
-            for parent_asin, score in hits:
+            for rank, (parent_asin, score) in enumerate(hits, start=1):
                 candidate = pool.setdefault(parent_asin, Candidate(parent_asin))
                 candidate.paths.add(path)
                 candidate.fts_score = max(candidate.fts_score, score)
+                previous = candidate.path_ranks.get(path)
+                if previous is None or rank < previous:
+                    candidate.path_ranks[path] = rank
 
         # Snippets are verbatim customer text; structured values come from the
         # parser, which is reliable for the closed vocabularies it does cover.
@@ -253,9 +276,12 @@ class CandidateIndex:
             value_terms = list(dict.fromkeys(_tokens(value)))
             add("structured", self._match(" OR ".join(f'"{t}"' for t in value_terms), 50))
 
+        for candidate in pool.values():
+            candidate.rrf_score = _rrf_score(candidate.path_ranks)
+
         ordered = sorted(
             pool.values(),
-            key=lambda candidate: (len(candidate.paths), candidate.fts_score),
+            key=lambda candidate: (len(candidate.paths), candidate.rrf_score, candidate.fts_score),
             reverse=True,
         )
         return ordered[:pool_size]

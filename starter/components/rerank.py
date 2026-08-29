@@ -8,6 +8,24 @@ from .models import SearchPlan, SessionState
 from .parser import COLOR_TERMS, MATERIAL_TERMS
 
 CANDIDATE_POOL_SIZE = 150
+
+# Pool-local min-max prior over raw fts_score, scaled before entering score_product.
+# Ablation (2026-08-29): minmax w=9 beat raw on Hit@10 (0.805 vs 0.790) and buying
+# (0.787 vs 0.738) while keeping constraints/penalties in range; rrf rerank did not
+# beat minmax on TechnicalScore. Modes below remain for scripts/score_ablation.py.
+RETRIEVAL_PRIOR_MODE = "minmax"
+RETRIEVAL_WEIGHT = 9.0
+PRIOR_ONLY = False
+RRF_K = 15
+
+_BM25_PATH_WEIGHTS = {
+    "rare_and": 3.0,
+    "core": 2.0,
+    "structured": 1.5,
+    "category": 1.0,
+    "bm25_all": 0.5,
+}
+
 BUDGET_RE = re.compile(r"(maximum|around)\s+\$(\d+(?:\.\d+)?)", re.IGNORECASE)
 TOKEN_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 
@@ -185,6 +203,90 @@ def _quality_tiebreak(product: Mapping[str, object]) -> float:
     return 0.05 * rating_value + 0.015 * math.log1p(max(count_value, 0.0))
 
 
+def _raw_retrieval_score(candidate: Mapping[str, object]) -> float:
+    retrieval = candidate.get("retrieval_score", 0.0)
+    return float(retrieval) if isinstance(retrieval, (int, float)) else 0.0
+
+
+def _retrieval_prior(candidates: Sequence[Mapping[str, object]]) -> dict[str, float]:
+    """Map parent_asin -> bounded prior in [0, 1] for this pool."""
+    mode = RETRIEVAL_PRIOR_MODE
+    if mode == "none":
+        return {}
+
+    if mode == "rrf":
+        fused: dict[str, float] = {}
+        for candidate in candidates:
+            parent_asin = str(candidate.get("parent_asin", "")).strip()
+            if not parent_asin:
+                continue
+            ranks = candidate.get("path_ranks")
+            if not isinstance(ranks, Mapping):
+                continue
+            score = 0.0
+            for path, rank in ranks.items():
+                if not isinstance(rank, int) or rank < 1:
+                    continue
+                weight = _BM25_PATH_WEIGHTS.get(str(path), 1.0)
+                score += weight / (RRF_K + rank)
+            if score > fused.get(parent_asin, 0.0):
+                fused[parent_asin] = score
+        if not fused:
+            return {}
+        max_score = max(fused.values())
+        if max_score <= 0.0:
+            return {parent_asin: 0.0 for parent_asin in fused}
+        return {parent_asin: score / max_score for parent_asin, score in fused.items()}
+
+    raw_by_asin: dict[str, float] = {}
+    for candidate in candidates:
+        parent_asin = str(candidate.get("parent_asin", "")).strip()
+        if not parent_asin:
+            continue
+        raw = _raw_retrieval_score(candidate)
+        previous = raw_by_asin.get(parent_asin)
+        if previous is None or raw > previous:
+            raw_by_asin[parent_asin] = raw
+
+    if mode == "raw":
+        return raw_by_asin
+
+    if not raw_by_asin:
+        return {}
+
+    if mode == "pool_rank":
+        ordered = sorted(raw_by_asin.items(), key=lambda item: (-item[1], item[0]))
+        pool_size = len(ordered)
+        if pool_size == 1:
+            return {ordered[0][0]: 1.0}
+        return {
+            parent_asin: (pool_size - rank) / (pool_size - 1)
+            for rank, (parent_asin, _score) in enumerate(ordered)
+        }
+
+    values = list(raw_by_asin.values())
+    if mode == "log_minmax":
+        transformed = {parent_asin: math.log1p(max(raw, 0.0)) for parent_asin, raw in raw_by_asin.items()}
+        lo = min(transformed.values())
+        hi = max(transformed.values())
+        if hi <= lo:
+            return {parent_asin: 1.0 for parent_asin in raw_by_asin}
+        return {
+            parent_asin: (value - lo) / (hi - lo)
+            for parent_asin, value in transformed.items()
+        }
+
+    # minmax
+    lo = min(values)
+    hi = max(values)
+    if hi <= lo:
+        return {parent_asin: 1.0 for parent_asin in raw_by_asin}
+    return {
+        parent_asin: (raw - lo) / (hi - lo)
+        for parent_asin, raw in raw_by_asin.items()
+    }
+
+
 def _feedback_penalty(parent_asin: str, state: SessionState) -> float:
     if not state.parsed_messages or not state.parsed_messages[-1].generic_feedback:
         return 0.0
@@ -201,6 +303,11 @@ def score_product(
     plan: SearchPlan,
     retrieval_score: float = 0.0,
 ) -> float:
+    """Score one product. ``retrieval_score`` is a pool-local prior in [0, 1]
+    (already scaled by ``RETRIEVAL_WEIGHT`` when called from ``rerank``)."""
+    if PRIOR_ONLY:
+        return retrieval_score
+
     fields = _field_map(product)
     unconstrained = state.unconstrained_attributes
     query_terms = list(dict.fromkeys([*plan.required_terms, *plan.optional_terms]))
@@ -226,14 +333,18 @@ def rerank(
     """Return unique parent_asin values, best first."""
     catalog = products or {}
     active_plan = plan or SearchPlan([], [], [], [], {})
+    priors = _retrieval_prior(candidates)
     scored: dict[str, float] = {}
     for candidate in candidates:
         parent_asin = str(candidate.get("parent_asin", "")).strip()
         if not parent_asin:
             continue
         product = catalog.get(parent_asin, candidate)
-        retrieval = candidate.get("retrieval_score", 0.0)
-        retrieval_score = float(retrieval) if isinstance(retrieval, (int, float)) else 0.0
+        if RETRIEVAL_PRIOR_MODE == "raw":
+            retrieval_score = _raw_retrieval_score(candidate)
+        else:
+            prior = priors.get(parent_asin, 0.0)
+            retrieval_score = prior * RETRIEVAL_WEIGHT
         total = score_product(product, state, active_plan, retrieval_score)
         previous = scored.get(parent_asin)
         if previous is None or total > previous:

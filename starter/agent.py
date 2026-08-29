@@ -37,7 +37,11 @@ class Agent:
 
     def _retrieve_candidates(self, state: SessionState) -> list[dict]:
         return [
-            {"parent_asin": candidate.parent_asin, "retrieval_score": candidate.fts_score}
+            {
+                "parent_asin": candidate.parent_asin,
+                "retrieval_score": candidate.fts_score,
+                "path_ranks": dict(candidate.path_ranks),
+            }
             for candidate in self.candidate_index.get_candidates(state, pool_size=CANDIDATE_POOL_SIZE)
         ]
 

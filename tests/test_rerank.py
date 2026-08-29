@@ -104,6 +104,25 @@ class RerankTest(unittest.TestCase):
         )
         self.assertEqual(ranked[0], "CHEAP")
 
+    def test_retrieval_prior_does_not_override_color_violation(self) -> None:
+        self.store.update(self.state, "black leather boots without red", parse_message("black leather boots without red"))
+        plan = build_search_plan(self.state)
+        red_boot = {
+            **self.leather_boot,
+            "parent_asin": "RED_BOOT",
+            "title": "Red leather hiking boots",
+        }
+        ranked = rerank(
+            [
+                {"parent_asin": "RED_BOOT", "retrieval_score": 200.0},
+                {"parent_asin": "BOOT", "retrieval_score": 10.0},
+            ],
+            self.state,
+            plan,
+            {**self.products, "RED_BOOT": red_boot},
+        )
+        self.assertEqual(ranked[0], "BOOT")
+
     def test_generic_feedback_demotes_previous_top_hit(self) -> None:
         self.store.update(self.state, "leather boots", parse_message("leather boots"))
         self.state.last_recommendations = ["BOOT"]
