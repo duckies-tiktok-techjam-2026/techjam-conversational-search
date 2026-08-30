@@ -8,6 +8,8 @@ from .models import SearchPlan, SessionState
 from .parser import COLOR_TERMS, MATERIAL_TERMS
 from .snippets import tokens as snippet_tokens
 
+from .cross_encoder_rerank import CrossEncoderReranker
+
 CANDIDATE_POOL_SIZE = 150
 BUDGET_RE = re.compile(r"(maximum|around)\s+\$(\d+(?:\.\d+)?)", re.IGNORECASE)
 TOKEN_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
@@ -319,6 +321,7 @@ def rerank(
     state: SessionState,
     plan: SearchPlan | None,
     products: Mapping[str, Mapping[str, object]] | None = None,
+    cross_encoder: CrossEncoderReranker | None = None,
 ) -> list[str]:
     """Return unique parent_asin values, best first."""
     catalog = products or {}
@@ -335,6 +338,8 @@ def rerank(
         previous = scored.get(parent_asin)
         if previous is None or total > previous:
             scored[parent_asin] = total
+    if cross_encoder is not None and cross_encoder.enabled:
+        scored = cross_encoder.boost_scores(scored, state, active_plan, catalog)
     return [
         parent_asin
         for parent_asin, _score in sorted(scored.items(), key=lambda item: (-item[1], item[0]))

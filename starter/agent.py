@@ -6,6 +6,7 @@ from pathlib import Path
 from .components.models import SessionState
 from .components.parser import parse_message
 from .components.questions import choose_question_attribute, question_text
+from .components.cross_encoder_rerank import CrossEncoderReranker
 from .components.rerank import CANDIDATE_POOL_SIZE, rerank
 from .components.retrieval import CandidateIndex
 from .components.search_plan import build_search_plan
@@ -21,6 +22,7 @@ class Agent:
         self.products: dict[str, dict] = {}
         self._load_products()
         self.candidate_index = CandidateIndex(self.catalog_path)
+        self.cross_encoder_reranker = CrossEncoderReranker()
 
     def _load_products(self) -> None:
         with self.catalog_path.open(encoding="utf-8") as handle:
@@ -57,6 +59,7 @@ class Agent:
             state,
             state.last_search_plan,
             self.products,
+            cross_encoder=self.cross_encoder_reranker,
         )
         recommendations = [{"parent_asin": parent_asin} for parent_asin in ranked[:top_k]]
         state.last_recommendations = [item["parent_asin"] for item in recommendations]
