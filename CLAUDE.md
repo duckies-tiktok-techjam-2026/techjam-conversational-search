@@ -177,13 +177,14 @@ property of retrieval only — the snippets-into-rerank change below does not to
 
 ### Local score (2026-08-30, full public set, `python3 -m evaluator.local_evaluator`)
 
-Aggregate: **HitRate@10 0.945 · MRR 0.572 · MTTC 3.690 · Efficiency 0.731 · TechnicalScore
-0.790** (prior 0.930 / 0.560 / 4.055 / 0.694 / 0.772; before that 0.920 / 0.561 / 4.11 / 0.689 /
-0.766; 0.915 / 0.552 / 4.31 / 0.669 / 0.757; 0.790 / 0.458 / 4.64 / 0.637 / 0.660; pre-pipeline
-0.450 / 0.191 / 7.71 / 0.330 / 0.348; weak-BM25 baseline 0.125 / 0.068 / 9.81 / — / 0.107).
-Token usage 0 (pure stdlib). Run takes ~39s.
+Aggregate: **HitRate@10 0.965 · MRR 0.583 · MTTC 3.000 · Efficiency 0.800 · TechnicalScore
+0.817** (prior 0.945 / 0.572 / 3.690 / 0.731 / 0.790; before that 0.930 / 0.560 / 4.055 / 0.694 /
+0.772; 0.920 / 0.561 / 4.11 / 0.689 / 0.766; 0.915 / 0.552 / 4.31 / 0.669 / 0.757; 0.790 / 0.458 /
+4.64 / 0.637 / 0.660; pre-pipeline 0.450 / 0.191 / 7.71 / 0.330 / 0.348; weak-BM25 baseline 0.125 /
+0.068 / 9.81 / — / 0.107). Token usage 0 (pure stdlib). Run takes ~33s. `results.json` from this
+run is the current reference (gitignored).
 
-Four recent moves:
+Recent moves (oldest first):
 
 - `0.660 → 0.757` — the `questions.py` clarification-policy rewrite (commit `81fd7cd`):
 `EMPTY_INTENT_PRIORITY` / `ACTIVE_INTENT_PRIORITY` lead with `feature`, `other` appended as a terminal catch-all. Mostly `buying` (0.738 → 0.950).
@@ -210,32 +211,43 @@ cumulative: phrases 0.778, + snippet terms 0.783, + coverage 0.790. `_COVERAGE_W
 over ~5–12 and degrades at 20; ships at 6.0. Zeroing `_phrase_score` on top of coverage costs
 0.009, so both terms earn their place. Lifted `boundary` Hit 0.900 → 1.000, `browsing` 0.950 →
 0.975; `intent_override` unmoved.
+- `0.790 → 0.817` — "Enhancement to score" (commit `c658e74`): three changes bundled —
+(1) `snippets.py` / `search_plan.py` no longer hard-cut everything before an override turn, so
+rerank keeps the still-valid pre-override clues (docs gap 3, previously flagged as the next
+target); (2) turn-aware question selection in `questions.py`; (3) a category-mismatch penalty in
+`rerank.score_product`; plus a `session_store.py` field. This is the move that closed
+`intent_override`: Hit 0.833 → 0.967, MRR 0.619 → 0.690, MTTC 5.43 → 4.10. MTTC also dropped
+across the other three (aggregate 3.69 → 3.00).
+- (no score change) `15636a9` adds an **optional** cross-encoder second stage —
+`starter/components/cross_encoder_rerank.py`, `requirements-cross-encoder.txt`
+(`sentence-transformers`), env vars `TECHJAM_CROSS_ENCODER_RERANK` / `_TOP_N` / `_WEIGHT`. Off by
+default; re-scores the top rule-ranked candidates with `cross-encoder/ms-marco-MiniLM-L-6-v2`.
+Falls back to rule-only when the flag is unset, the package is missing, or the model download
+fails, so the offline score above is unaffected. `SETUP_INSTRUCTIONS.md` documents the flags and
+`scripts/cross_encoder_sweep.py` tunes them.
 
 
 | Scenario        | n   | Hit@10 | MRR   | MTTC | (prior)              |
 | --------------- | --- | ------ | ----- | ---- | -------------------- |
-| boundary        | 10  | 1.000  | 0.613 | 5.00 | 0.900 / 0.630 / 5.10 |
-| browsing        | 80  | 0.975  | 0.567 | 3.11 | 0.950 / 0.518 / 3.45 |
-| buying          | 80  | 0.950  | 0.553 | 3.45 | 0.950 / 0.575 / 4.00 |
-| intent_override | 30  | 0.833  | 0.619 | 5.43 | 0.833 / 0.610 / 5.47 |
+| boundary        | 10  | 1.000  | 0.613 | 4.00 | 1.000 / 0.613 / 5.00 |
+| browsing        | 80  | 0.975  | 0.567 | 2.96 | 0.975 / 0.567 / 3.11 |
+| buying          | 80  | 0.950  | 0.554 | 2.50 | 0.950 / 0.553 / 3.45 |
+| intent_override | 30  | 0.967  | 0.690 | 4.10 | 0.833 / 0.619 / 5.43 |
 
 
-Reads: the snippet change was aimed at MRR but cashed out mostly as Hit and MTTC (−0.37 turns
-aggregate) — the verbatim clues pull the target *into* the Top 10 earlier more readily than they
-pull it to rank 1. `buying` MRR actually slipped (0.575 → 0.553) while its MTTC dropped 0.55
-turns, i.e. it now hits sooner but lands slightly lower in the list. `intent_override` (0.833) is
-untouched and is now clearly the weakest scenario: `disclosure_snippets` hard-cuts everything
-before the override turn, so rerank — not just retrieval — throws away still-valid pre-override
-clues (docs gap 3, the next target). Remaining headroom overall is still MRR: 0.572 against a
-0.945 hit rate means targets land mid-list, not at rank 1.
+Reads: `c658e74` was a broad MTTC win — every scenario hits sooner (aggregate −0.69 turns), and
+the pre-override snippet fix finally moved `intent_override` on all three metrics, so it is no
+longer the weakest scenario (it now has the *highest* MRR, 0.690). `buying` (Hit 0.950, MRR
+0.554) is now the low scenario on MRR. Remaining headroom overall is still MRR: 0.583 against a
+0.965 hit rate means targets land mid-list, not at rank 1 — and Hit@10 is close to its ceiling.
 
 Open items:
 
-- Recompute the local score after any pipeline change; `results.json` from this run is the
+- Recompute the local score after any pipeline change; `results.json` from the latest run is the
 current reference (still gitignored).
-- `intent_override` (0.833) is the lowest scenario — the turn 3–4 scoring gate caps how low
-MTTC can go, but the pre-override snippet hard-cut (docs gap 3) is a real fixable loss and is
-the next target.
+- `buying` MRR 0.554 is now the weakest per-scenario number — targets are in the Top 10 (Hit
+0.950) but land mid-list. Aggregate MRR (0.583) is the main headroom now that Hit@10 is near
+ceiling.
 - `_quality_tiebreak` and the raw carried `retrieval_score` have never been sensitivity-checked
 against the (now much larger) snippet signals — cheap experiment, docs gap 6.
 - The "avoid repeated asks" guard in `choose_question_attribute` only re-adds
