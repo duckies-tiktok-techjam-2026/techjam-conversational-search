@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import re
+
 from copy import deepcopy
 
 from .models import Constraint, ParsedMessage, SessionState
+
+_CATEGORY_OPENER_RE = re.compile(r"looking for (.+?)[,.]", re.IGNORECASE)
 
 
 class SessionStore:
@@ -23,6 +27,7 @@ class SessionStore:
             last_asked_attribute=None,
             query_text="",
             override_count=0,
+            category_hint="",
         )
         self._sessions[session_id] = state
         return state
@@ -70,6 +75,10 @@ class SessionStore:
         state.disclosed_attributes -= overridden_attrs
 
         state.query_text = self._build_query_text(state)
+        if not state.category_hint and state.messages:
+            match = _CATEGORY_OPENER_RE.search(str(state.messages[0]).lower())
+            if match:
+                state.category_hint = match.group(1).strip()
         return state
 
     @staticmethod

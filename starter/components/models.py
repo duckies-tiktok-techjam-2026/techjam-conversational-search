@@ -32,6 +32,7 @@ class SearchPlan:
     # what the parser drops on the floor. Defaulted so the empty-plan fallback in
     # rerank keeps working positionally.
     snippet_terms: list[str] = field(default_factory=list)
+    snippet_weights: list[float] = field(default_factory=list)
 
 
 @dataclass
@@ -48,4 +49,5 @@ class SessionState:
     last_asked_attribute: str | None
     query_text: str
     override_count: int
+    category_hint: str = ""
     last_search_plan: SearchPlan | None = None

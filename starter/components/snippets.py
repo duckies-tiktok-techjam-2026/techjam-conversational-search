@@ -36,6 +36,8 @@ NON_ANSWER_RE = re.compile(
 # handled separately; the rest of the opener is filler.
 OPENER_RE = re.compile(r"^i'?m looking for .*?[,.]\s*")
 SNIPPET_SPLIT_RE = re.compile(r";|(?<=\.)\s+")
+# Pre-override clues stay in the pool but rank below post-override text.
+_PRE_OVERRIDE_WEIGHT = 0.35
 
 
 def tokens(text: str) -> list[str]:
@@ -46,20 +48,18 @@ def tokens(text: str) -> list[str]:
     ]
 
 
-def disclosure_snippets(state) -> list[str]:
-    """Verbatim constraint text the customer actually said, newest turns last.
-
-    Scoped to the last override onward, boilerplate stripped, split into the
-    individual constraints the simulator joined with ``;``.
-    """
-    parsed_messages = getattr(state, "parsed_messages", None) or []
-    start_index = 0
+def _override_start_index(parsed_messages) -> int | None:
     for index, parsed in enumerate(parsed_messages):
         if parsed.override:
-            start_index = index
+            return index
+    return None
 
-    snippets: list[str] = []
-    for index, parsed in enumerate(parsed_messages[start_index:], start=start_index):
+
+def disclosure_snippet_entries(state) -> list[tuple[str, int]]:
+    """Return ``(snippet, source_message_index)`` pairs in disclosure order."""
+    parsed_messages = getattr(state, "parsed_messages", None) or []
+    entries: list[tuple[str, int]] = []
+    for index, parsed in enumerate(parsed_messages):
         text = str(parsed.normalized_text or "")
         if not text or NON_ANSWER_RE.search(text):
             continue
@@ -72,8 +72,38 @@ def disclosure_snippets(state) -> list[str]:
         for part in SNIPPET_SPLIT_RE.split(payload):
             part = part.strip(" .,-")
             if tokens(part):
-                snippets.append(part)
-    return list(dict.fromkeys(snippets))
+                entries.append((part, index))
+    return entries
+
+
+def disclosure_snippets(state) -> list[str]:
+    """Verbatim constraint text the customer actually said, newest turns last."""
+    seen: dict[str, float] = {}
+    override_start = _override_start_index(getattr(state, "parsed_messages", None) or [])
+    for snippet, message_index in disclosure_snippet_entries(state):
+        weight = 1.0 if override_start is None or message_index >= override_start else _PRE_OVERRIDE_WEIGHT
+        if snippet not in seen:
+            seen[snippet] = weight
+        else:
+            seen[snippet] = max(seen[snippet], weight)
+    return list(seen.keys())
+
+
+def snippet_weights(state, snippets: list[str]) -> list[float]:
+    """Parallel weights for ``disclosure_snippets`` output (higher = fresher intent)."""
+    override_start = _override_start_index(getattr(state, "parsed_messages", None) or [])
+    index_by_snippet = {
+        snippet: message_index
+        for snippet, message_index in disclosure_snippet_entries(state)
+    }
+    weights: list[float] = []
+    for snippet in snippets:
+        message_index = index_by_snippet.get(snippet, 0)
+        if override_start is None or message_index >= override_start:
+            weights.append(1.0)
+        else:
+            weights.append(_PRE_OVERRIDE_WEIGHT)
+    return weights
 
 
 def snippet_terms(snippets: list[str]) -> list[str]:

@@ -23,13 +23,23 @@ QUESTION_TEXT = {
 
 
 def choose_question_attribute(state: SessionState, turn: int) -> str | None:
-    del turn
-    priorities = ACTIVE_INTENT_PRIORITY if state.positive_constraints else EMPTY_INTENT_PRIORITY
     excluded = state.disclosed_attributes | state.unconstrained_attributes | state.asked_attributes
-
-    # Avoid repeated asks of the same attribute when there are alternatives available.
-    if state.last_asked_attribute and state.last_asked_attribute in excluded:
+    if state.last_asked_attribute:
         excluded = excluded | {state.last_asked_attribute}
+
+    if state.parsed_messages and state.parsed_messages[-1].override:
+        for constraint in state.parsed_messages[-1].constraints:
+            if constraint.attribute not in excluded and constraint.attribute != "category":
+                return constraint.attribute
+
+    if turn >= 7 and "other" not in excluded:
+        return "other"
+
+    priorities = ACTIVE_INTENT_PRIORITY if state.positive_constraints else EMPTY_INTENT_PRIORITY
+    if state.messages and "key requirement is" in str(state.messages[0]).lower():
+        priorities = ("feature", "material", "color", "other", "size", "style", "brand", "budget", "use_case", "category")
+    elif turn >= 5 and "other" not in excluded:
+        priorities = ("other", *priorities)
 
     for attribute in priorities:
         if attribute not in excluded:

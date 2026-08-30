@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .models import SearchPlan, SessionState
-from .snippets import disclosure_snippets, snippet_terms
+from .snippets import disclosure_snippets, snippet_terms, snippet_weights
 
 
 def build_search_plan(state: SessionState) -> SearchPlan:
@@ -39,6 +39,7 @@ def build_search_plan(state: SessionState) -> SearchPlan:
         exact_phrases=exact_phrases,
         attribute_values=attribute_values,
         snippet_terms=snippet_terms(exact_phrases),
+        snippet_weights=snippet_weights(state, exact_phrases),
     )
 
 

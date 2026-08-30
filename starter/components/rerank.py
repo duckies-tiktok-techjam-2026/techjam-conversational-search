@@ -80,27 +80,36 @@ def _canonical(text: str) -> str:
     return " " + NON_ALNUM_RE.sub(" ", text).strip() + " "
 
 
-def _phrase_score(fields: Mapping[str, str], phrases: Sequence[str]) -> float:
+def _phrase_score(
+    fields: Mapping[str, str],
+    phrases: Sequence[str],
+    weights: Sequence[float] | None = None,
+) -> float:
     if not phrases:
         return 0.0
     title = _canonical(fields["title"])
     strong = _canonical(_combined_text(fields, "categories", "features", "details"))
     description = _canonical(fields["description"])
     score = 0.0
-    for phrase in phrases:
+    for index, phrase in enumerate(phrases):
         needle = _canonical(phrase)
         if needle == "  ":
             continue
+        weight = weights[index] if weights and index < len(weights) else 1.0
         if needle in title:
-            score += 5.0
+            score += 5.0 * weight
         elif needle in strong:
-            score += 2.5
+            score += 2.5 * weight
         elif needle in description:
-            score += 1.0
+            score += 1.0 * weight
     return score
 
 
-def _snippet_coverage(fields: Mapping[str, str], snippets: Sequence[str]) -> float:
+def _snippet_coverage(
+    fields: Mapping[str, str],
+    snippets: Sequence[str],
+    weights: Sequence[float] | None = None,
+) -> float:
     """Per-clue token coverage -- partial credit where ``_phrase_score`` is all-or-nothing.
 
     A disclosed constraint is truncated at 180 characters and may be split
@@ -114,11 +123,12 @@ def _snippet_coverage(fields: Mapping[str, str], snippets: Sequence[str]) -> flo
     if not strong:
         return 0.0
     score = 0.0
-    for snippet in snippets:
+    for index, snippet in enumerate(snippets):
         terms = snippet_tokens(snippet)
         if not terms:
             continue
-        score += _COVERAGE_WEIGHT * sum(1 for term in terms if term in strong) / len(terms)
+        weight = weights[index] if weights and index < len(weights) else 1.0
+        score += weight * _COVERAGE_WEIGHT * sum(1 for term in terms if term in strong) / len(terms)
     return score
 
 
@@ -245,6 +255,22 @@ def _feedback_penalty(parent_asin: str, state: SessionState) -> float:
     return 1.5 - (0.1 * rank)
 
 
+def _category_mismatch_penalty(fields: Mapping[str, str], state: SessionState) -> float:
+    hint = str(getattr(state, "category_hint", "") or "").strip().lower()
+    if not hint:
+        return 0.0
+    hint_tokens = _tokens(hint)
+    if not hint_tokens:
+        return 0.0
+    product_tokens = _tokens(_combined_text(fields, "title", "categories"))
+    if not product_tokens:
+        return 0.0
+    overlap = sum(1 for token in hint_tokens if token in product_tokens)
+    if overlap >= max(1, len(hint_tokens) // 3):
+        return 0.0
+    return 2.5
+
+
 def _override_boost(state: SessionState) -> float:
     """Weight the freshest (post-override) exact-phrase signal more heavily.
 
@@ -272,10 +298,11 @@ def score_product(
         *plan.snippet_terms,
         *plan.optional_terms,
     ]))
+    phrase_weights = plan.snippet_weights or None
     return (
         retrieval_score
-        + _override_boost(state) * _phrase_score(fields, plan.exact_phrases)
-        + _snippet_coverage(fields, plan.exact_phrases)
+        + _override_boost(state) * _phrase_score(fields, plan.exact_phrases, phrase_weights)
+        + _snippet_coverage(fields, plan.exact_phrases, phrase_weights)
         + _token_overlap(fields, query_terms)
         + _attribute_score(fields, plan, unconstrained)
         + _optional_score(fields, plan.optional_terms)
@@ -283,6 +310,7 @@ def score_product(
         - _contradiction_penalty(fields, plan, unconstrained)
         - _budget_penalty(product, plan, unconstrained)
         - _feedback_penalty(str(product.get("parent_asin", "")), state)
+        - _category_mismatch_penalty(fields, state)
     )
 
 
