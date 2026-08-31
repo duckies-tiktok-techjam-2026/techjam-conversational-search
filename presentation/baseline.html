@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Baseline shortcomings</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --surface: #f7f8fa;
+      --border: #e4e7ec;
+      --text: #0a0a0a;
+      --heading: #0f1319;
+      --muted: #8b939d;
+      --label: #9aa2ac;
+      --provided: #0a97c4;
+      --shortcoming: #e5397a;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+      background: #eef0f3;
+      color: var(--text);
+      line-height: 1.5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* fixed-size slide, scaled to the viewport by the script below */
+    .slide {
+      width: 1280px;
+      height: 720px;
+      flex: 0 0 auto;
+      transform-origin: center center;
+      padding: 48px 56px 44px;
+      background:
+        radial-gradient(circle at 10% 8%, rgba(37, 244, 238, 0.12), transparent 42%),
+        radial-gradient(circle at 92% 94%, rgba(254, 44, 85, 0.06), transparent 44%),
+        var(--bg);
+      display: flex;
+      flex-direction: column;
+    }
+
+    h1 {
+      font-size: 40px;
+      font-weight: 800;
+      letter-spacing: -0.022em;
+      color: var(--text);
+      margin-bottom: 28px;
+    }
+
+    .grid {
+      flex: 1 1 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-auto-rows: 1fr;
+      gap: 24px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px 34px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* top block — badge in the gutter, label + heading indented beside it */
+    .provided {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .badge {
+      flex: 0 0 auto;
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      background: rgba(10, 151, 196, 0.12);
+      border: 1px solid rgba(10, 151, 196, 0.20);
+      color: var(--provided);
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+
+    .tag {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+    .tag.provided-tag { color: var(--label); }
+    .tag.shortcoming-tag { color: var(--shortcoming); }
+
+    .provided h2 {
+      font-size: 19px;
+      font-weight: 700;
+      color: var(--heading);
+      letter-spacing: -0.01em;
+      margin-top: 4px;
+    }
+
+    .divider {
+      border-top: 1px solid #e6e9ee;
+      margin: 18px 0 16px;
+    }
+
+    .shortcoming h3 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--heading);
+      letter-spacing: -0.01em;
+      margin-top: 9px;
+    }
+
+    .shortcoming p {
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: var(--muted);
+      margin-top: 11px;
+      max-width: 540px;
+    }
+  </style>
+</head>
+<body>
+  <div class="slide" id="slide">
+    <h1>Shortcomings of the provided baseline agent</h1>
+
+    <div class="grid">
+      <div class="card">
+        <div class="provided">
+          <span class="badge">1</span>
+          <div>
+            <div class="tag provided-tag">Provided</div>
+            <h2>A clarification question each turn</h2>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="shortcoming">
+          <div class="tag shortcoming-tag">Shortcoming</div>
+          <h3>It never asks one.</h3>
+          <p>The customer only reveals a constraint when asked for that attribute, so nine of the ten turns return no new information.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="provided">
+          <span class="badge">2</span>
+          <div>
+            <div class="tag provided-tag">Provided</div>
+            <h2>Per-session state and a user profile</h2>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="shortcoming">
+          <div class="tag shortcoming-tag">Shortcoming</div>
+          <h3>It reads only the current turn.</h3>
+          <p>Constraints never accumulate, the profile is unused, and an intent override or a &ldquo;no preference&rdquo; reply is not handled.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="provided">
+          <span class="badge">3</span>
+          <div>
+            <div class="tag provided-tag">Provided</div>
+            <h2>Full-text search over 50,000 products</h2>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="shortcoming">
+          <div class="tag shortcoming-tag">Shortcoming</div>
+          <h3>One query shape: all keywords joined by OR.</h3>
+          <p>It cannot require two attributes together, so a single rare word outranks a product matching the whole description.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="provided">
+          <span class="badge">4</span>
+          <div>
+            <div class="tag provided-tag">Provided</div>
+            <h2>A ranked Top-10 recommendation list</h2>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="shortcoming">
+          <div class="tag shortcoming-tag">Shortcoming</div>
+          <h3>It returns the index's first ten rows unchanged.</h3>
+          <p>With no reranking stage, nothing demotes the wrong colour, an over-budget price, or an item the customer already rejected.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Scale the fixed 1280x720 slide to fit whatever window it is viewed in.
+    (function () {
+      var slide = document.getElementById("slide");
+      function fit() {
+        var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+        slide.style.transform = "scale(" + s + ")";
+      }
+      fit();
+      window.addEventListener("resize", fit);
+    })();
+  </script>
+</body>
+</html>
