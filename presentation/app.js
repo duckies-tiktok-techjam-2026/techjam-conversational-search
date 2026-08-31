@@ -213,7 +213,7 @@ function drawGraph() {
 
   // arrow markers
   const defs = svgEl("defs");
-  for (const [id, color] of [["arrow", "#3c5279"], ["arrow-loop", "#fbbf24"], ["arrow-hot", "#34d399"]]) {
+  for (const [id, color] of [["arrow", "#aeb6c0"], ["arrow-loop", "#c98a1a"], ["arrow-hot", "#0ca678"]]) {
     const marker = svgEl("marker", {
       id, viewBox: "0 0 10 10", refX: 8, refY: 5,
       markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse",
