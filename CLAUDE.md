@@ -218,12 +218,11 @@ target); (2) turn-aware question selection in `questions.py`; (3) a category-mis
 `rerank.score_product`; plus a `session_store.py` field. This is the move that closed
 `intent_override`: Hit 0.833 → 0.967, MRR 0.619 → 0.690, MTTC 5.43 → 4.10. MTTC also dropped
 across the other three (aggregate 3.69 → 3.00).
-- (no score change) `15636a9` adds an **optional** cross-encoder second stage —
-`starter/components/cross_encoder_rerank.py`, `requirements-cross-encoder.txt`
-(`sentence-transformers`), env vars `TECHJAM_CROSS_ENCODER_RERANK` / `_TOP_N` / `_WEIGHT`. Off by
-default; re-scores the top rule-ranked candidates with `cross-encoder/ms-marco-MiniLM-L-6-v2`.
-Falls back to rule-only when the flag is unset, the package is missing, or the model download
-fails, so the offline score above is unaffected. `SETUP_INSTRUCTIONS.md` documents the flags and
+- (no score change) `15636a9` adds a **cross-encoder second stage** —
+`starter/components/cross_encoder_rerank.py`, `requirements.txt`
+(`sentence-transformers`). On by default; model weights download on first agent
+startup. Env vars `TECHJAM_CROSS_ENCODER_TOP_N` / `_WEIGHT` tune it;
+`TECHJAM_CROSS_ENCODER_DISABLE=1` opts out for baseline comparisons only.
 `scripts/cross_encoder_sweep.py` tunes them.
 
 

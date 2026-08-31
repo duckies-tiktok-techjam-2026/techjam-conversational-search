@@ -1,18 +1,23 @@
-"""Optional second-stage cross-encoder rerank (sentence-transformers).
+"""Second-stage cross-encoder rerank (sentence-transformers).
 
 Unlike bi-encoders (MiniLM cosine similarity), a cross-encoder reads the
 (query, product) pair jointly, which is stronger for pushing the exact item
 to rank 1. Only the top rule-scored candidates are rescored for speed.
 
-Enable with ``TECHJAM_CROSS_ENCODER_RERANK=1`` (default off).
-Without the package installed, all calls are a no-op.
+This stage is always on in the default pipeline. The model weights are
+downloaded automatically on first use (~90 MB from Hugging Face).
+
+Opt out only for baseline comparisons: ``TECHJAM_CROSS_ENCODER_DISABLE=1``.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import subprocess
+import sys
 from collections.abc import Mapping
+from pathlib import Path
 
 from .models import SearchPlan, SessionState
 
@@ -20,7 +25,12 @@ _MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 # Defaults from quick sweep on the public set (top_n=15, weight=2.0).
 _DEFAULT_TOP_N = 15
 _DEFAULT_WEIGHT = 2.0
-_ENV_FLAG = "TECHJAM_CROSS_ENCODER_RERANK"
+_ENV_DISABLE = "TECHJAM_CROSS_ENCODER_DISABLE"
+_REQUIREMENTS = Path(__file__).resolve().parents[2] / "requirements.txt"
+
+
+def _disabled_by_env() -> bool:
+    return os.environ.get(_ENV_DISABLE, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _top_n() -> int:
@@ -39,8 +49,17 @@ def _cross_encoder_weight() -> float:
         return _DEFAULT_WEIGHT
 
 
-def _enabled_by_env() -> bool:
-    return os.environ.get(_ENV_FLAG, "").strip().lower() in {"1", "true", "yes", "on"}
+def _install_dependencies() -> None:
+    if not _REQUIREMENTS.is_file():
+        raise RuntimeError(
+            "sentence-transformers is required but requirements.txt was not found. "
+            "Install manually: pip install 'sentence-transformers>=2.7.0'"
+        )
+    print(f"Installing cross-encoder dependencies from {_REQUIREMENTS}...", flush=True)
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-r", str(_REQUIREMENTS)],
+        check=True,
+    )
 
 
 def _as_text(value: object) -> str:
@@ -83,26 +102,40 @@ def build_product_text(product: Mapping[str, object]) -> str:
 class CrossEncoderReranker:
     def __init__(self) -> None:
         self._model = None
-        self._load_failed = False
 
     @property
     def enabled(self) -> bool:
-        return _enabled_by_env() and self._ensure_model()
+        return not _disabled_by_env() and self._ensure_model()
 
-    def _ensure_model(self) -> bool:
-        if self._load_failed:
+    def warm_up(self) -> None:
+        """Load the cross-encoder model (downloads weights on first run)."""
+        if _disabled_by_env():
+            return
+        self._ensure_model(required=True)
+
+    def _ensure_model(self, *, required: bool = False) -> bool:
+        if _disabled_by_env():
             return False
         if self._model is not None:
             return True
         try:
             from sentence_transformers import CrossEncoder
         except ImportError:
-            self._load_failed = True
-            return False
+            if not required:
+                return False
+            _install_dependencies()
+            from sentence_transformers import CrossEncoder
+
         try:
+            print(f"Loading cross-encoder model {_MODEL_NAME}...", flush=True)
             self._model = CrossEncoder(_MODEL_NAME)
-        except Exception:
-            self._load_failed = True
+        except Exception as exc:
+            message = (
+                f"Failed to load cross-encoder model {_MODEL_NAME}. "
+                "Check your network connection for the first-run download."
+            )
+            if required:
+                raise RuntimeError(message) from exc
             return False
         return True
 

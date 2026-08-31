@@ -15,10 +15,10 @@ of products that it refines as more is revealed. It handles shoppers who know ex
 they want, shoppers who start vague, shoppers who change their mind mid-conversation, and
 shoppers who have no opinion on something it asked about.
 
-Our approach is deliberately simple: a **rule-based pipeline that runs entirely offline** —
-no LLM calls, no model training, no vector database — with an **optional neural reranker**
-that can be switched on when a network and GPU are available. The core system is fast,
-fully reproducible, and cheap to run.
+Our approach combines a **rule-based retrieval and rerank core** with a **built-in cross-encoder
+second stage** — no LLM calls, no model training, no vector database. Dependencies and model
+weights download automatically on first startup; subsequent runs are offline-friendly once
+the Hugging Face cache is warm.
 
 ### Approach
 
@@ -49,16 +49,16 @@ on something, we stop asking about it.
 - **Ask the question that reveals the most.** The shopper only volunteers information that
 answers what we asked, so choosing the next question well is as important as ranking. The
 agent follows a priority order that front-loads the most discriminating attributes.
-- **Optional neural reranker.** When enabled, a pretrained cross-encoder
+- **Cross-encoder second stage.** A pretrained cross-encoder
 (`cross-encoder/ms-marco-MiniLM-L-6-v2`) re-scores the top rule-ranked candidates against
-the customer query. It is off by default, and the agent falls back to the rule-only path
-automatically when it is disabled, not installed, or offline.
+the customer query on every turn. Model weights download automatically on first agent
+startup (~90 MB).
 
 
 
 ### Results (local public set, 200 sessions)
 
-Rule-only pipeline, `python3 -m evaluator.local_evaluator`:
+Rule-based retrieval + cross-encoder rerank, `python3 -m evaluator.local_evaluator`:
 
 
 | Metric                     | Score     | Weak-BM25 baseline |
@@ -91,8 +91,8 @@ Per scenario:
 
 ## Setup and Installation
 
-**Requirements:** Python 3.10+. The default agent uses only the Python standard library —
-no build step, no `pip install`.
+**Requirements:** Python 3.10+. First run installs `sentence-transformers` automatically if
+missing and downloads the cross-encoder model weights (~90 MB).
 
 ### 1. Clone and enter the repo
 
@@ -117,15 +117,14 @@ mv catalog.jsonl data/catalog.jsonl
 Verify: `wc -l data/catalog.jsonl` should print `50000`. Check the file against the published
 `SHA256SUMS` if provided.
 
-### 3. (Optional) Install the cross-encoder reranker
+### 3. (Optional) Pre-install dependencies
 
-Only needed for the optional neural second stage. The default rule-based agent does not
-require this.
+Skip the auto-pip step on first startup:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
-pip install -r requirements-cross-encoder.txt
+pip install -r requirements.txt
 ```
 
 The first enabled run downloads `cross-encoder/ms-marco-MiniLM-L-6-v2` (~90 MB) from
@@ -147,33 +146,31 @@ python3 -m unittest discover -s tests
 
 
 
-### Reproduce the reported Technical Score (rule-only, offline)
+### Reproduce the reported Technical Score
 
 ```bash
 python3 -m evaluator.local_evaluator
 ```
 
 This evaluates all 200 public sessions against the full catalog and writes per-session
-results plus aggregate metrics to `results.json`. Expected:
-**Hit Rate@10 0.965 · MRR 0.583 · MTTC 3.00 · Technical Score 0.817**.
-The evaluator and public labels are unmodified.
+results plus aggregate metrics to `results.json`. The pipeline always runs the
+cross-encoder second stage; on first startup missing dependencies and model weights are
+fetched automatically (~90 MB from Hugging Face).
 
-### (Optional) Reproduce with the cross-encoder second stage
+Optional one-time install before the first run:
 
 ```bash
-TECHJAM_CROSS_ENCODER_RERANK=1 python3 -m evaluator.local_evaluator
+pip install -r requirements.txt
 ```
 
-
-| Environment variable           | Default | Purpose                                         |
-| ------------------------------ | ------- | ----------------------------------------------- |
-| `TECHJAM_CROSS_ENCODER_RERANK` | off     | set to `1` to enable the cross-encoder stage    |
-| `TECHJAM_CROSS_ENCODER_TOP_N`  | `15`    | number of top rule-ranked candidates to rescore |
-| `TECHJAM_CROSS_ENCODER_WEIGHT` | `2.0`   | weight applied to the cross-encoder score       |
+The evaluator and public labels are unmodified.
 
 
-The agent runs rule-based only — with no code change — whenever the flag is unset,
-`sentence-transformers` is missing, or the model download fails.
+| Environment variable            | Default | Purpose                                              |
+| ------------------------------- | ------- | ---------------------------------------------------- |
+| `TECHJAM_CROSS_ENCODER_TOP_N`   | `15`    | number of top rule-ranked candidates to rescore      |
+| `TECHJAM_CROSS_ENCODER_WEIGHT`  | `2.0`   | weight applied to the cross-encoder score            |
+| `TECHJAM_CROSS_ENCODER_DISABLE` | off     | set to `1` for rule-only baseline comparisons only   |
 
 ### Inspect retrieval quality in isolation
 
@@ -208,14 +205,13 @@ not from what would actually be most discriminating given the current candidate 
 An information-gain-based selector (which attribute best splits the remaining candidates?)
 should reduce turns to first hit.
 - **Cross-encoder generalization is unverified.** Its weight and `top_n` were tuned on a
-public quick sweep; the private 800-session split may behave differently. It ships off by
-default for exactly this reason.
+public quick sweep; the private 800-session split may behave differently.
 - **Index build is uncached.** `CandidateIndex.__init__` rebuilds the FTS5 index and
 document-frequency table on every startup (~40 s). Persisting them would make iteration
 and cold starts much faster.
 - **No true semantic retrieval.** Everything lexical is BM25 / FTS5. Paraphrased
-constraints that share no tokens with the catalog row are only caught by the optional
-cross-encoder, and only if the candidate already made the pool.
+constraints that share no tokens with the catalog row are only caught if the candidate
+already made the pool and the cross-encoder can score it.
 
 ---
 
@@ -228,7 +224,7 @@ cross-encoder, and only if the candidate already made the pool.
 | ------------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Rayson Yap**     | Stateful conversation model | Built `session_store.py` and the multi-turn `SessionState` fold, including the Intent Override and Boundary transitions, and the `questions.py` clarification-attribute policy that drives what the simulated customer discloses.                                        |
 | **Puah Tze Foong** | Retrieval                   | Built `retrieval.py`, `snippets.py`, and `search_plan.py` — the in-memory FTS5 BM25 index, the document-frequency rare-term selection, and the specificity-ranked union of retrieval paths that produces the candidate pool from verbatim customer text.                 |
-| **Brian Chan**     | Ranking                     | Built `rerank.py`, the additive deterministic scoring model (exact-phrase and snippet-coverage bonuses, per-attribute containment, budget and mismatch penalties, feedback demotion), and the optional `cross_encoder_rerank.py` second stage with its offline fallback. |
+| **Brian Chan**     | Ranking                     | Built `rerank.py`, the additive deterministic scoring model (exact-phrase and snippet-coverage bonuses, per-attribute containment, budget and mismatch penalties, feedback demotion), and the built-in `cross_encoder_rerank.py` second stage. |
 
 
 ---
@@ -237,11 +233,12 @@ cross-encoder, and only if the candidate already made the pool.
 
 ## Model Choice and Cost
 
-- **Default path:** rule-based retrieval (SQLite FTS5) + deterministic additive rerank.
-No LLM, no network, no GPU. Token usage `0`, latency dominated by the one-time index build.
-- **Optional path:** `cross-encoder/ms-marco-MiniLM-L-6-v2` — pretrained on MS MARCO, not
-fine-tuned on competition data. Adds ~5–15× evaluation time on CPU. Enabled only via
-`TECHJAM_CROSS_ENCODER_RERANK=1`.
+- **Default path:** rule-based retrieval (SQLite FTS5) + deterministic additive rerank +
+cross-encoder rescore of the top 15 candidates. No LLM. First run needs network for
+dependency/model download; token usage stays `0`.
+- **Model:** `cross-encoder/ms-marco-MiniLM-L-6-v2` — pretrained on MS MARCO, not
+fine-tuned on competition data. Adds ~5–15× evaluation time on CPU versus rule-only.
+Set `TECHJAM_CROSS_ENCODER_DISABLE=1` only for baseline comparisons.
 
 No API keys are used or committed.
 
@@ -261,7 +258,7 @@ starter/components/
     snippets.py                   verbatim disclosure-snippet extraction (shared)
     retrieval.py                  FTS5 index + candidate-pool generation
     rerank.py                     deterministic candidate scoring
-    cross_encoder_rerank.py       optional neural second stage + offline fallback
+    cross_encoder_rerank.py       built-in neural second stage (always on by default)
     questions.py                  clarification-attribute selection
 evaluator/local_evaluator.py      public-set simulator and scorer (frozen)
 data/public_set.jsonl             200 labeled development sessions

@@ -8,6 +8,7 @@ Temporary setup guide for local development and submission. Copy relevant sectio
 
 - **Python 3.10+**
 - **Catalog:** `data/catalog.jsonl` (50,000 products — not committed to git)
+- **Python packages:** `sentence-transformers` (installed automatically on first agent startup if missing)
 
 ---
 
@@ -25,55 +26,49 @@ Verify: `wc -l data/catalog.jsonl` should show `50000`.
 
 ---
 
-## 2. Default setup (rule-based, offline)
+## 2. Install and run evaluation
 
-No extra packages. Uses Python standard library + optional `sentence-transformers` only if enabled.
+The agent pipeline always includes a cross-encoder second stage. On first run, missing
+Python packages and model weights (~90 MB) are fetched automatically.
 
 ```bash
-# From repo root
-python3 -m unittest discover -s tests
+# From repo root — one command after the catalog is in place
 python3 -m evaluator.local_evaluator
 ```
 
-This evaluates **all 200 public sessions** against the full catalog and writes `results.json`.
-
-**Expected baseline (rule-only, cross-encoder off):** TechnicalScore ~0.817
-
----
-
-## 3. Optional: cross-encoder rerank
-
-Adds a second-stage reranker using `cross-encoder/ms-marco-MiniLM-L-6-v2` (via `sentence-transformers`). Improves MRR by scoring `(customer query, product)` pairs jointly on the top 15 rule-scored candidates.
-
-### Install
+Optional one-time install (skips the auto-pip step on first startup):
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-
-pip install -r requirements-cross-encoder.txt
+pip install -r requirements.txt
 ```
 
-First run downloads the model (~90 MB) from Hugging Face. Network required once for download.
-
-### Run eval with cross-encoder
+Run the test suite:
 
 ```bash
-TECHJAM_CROSS_ENCODER_RERANK=1 python3 -m evaluator.local_evaluator
+python3 -m unittest discover -s tests
 ```
 
-### Environment variables
+This evaluates **all 200 public sessions** against the full catalog and writes `results.json`.
+
+**Expected score (rule-based + cross-encoder, top_n=15, weight=2.0):** run locally after setup and compare `recommended_technical_score` in `results.json`.
+
+---
+
+## 3. Cross-encoder tuning knobs
+
+These environment variables adjust the built-in cross-encoder stage (no enable flag required):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TECHJAM_CROSS_ENCODER_RERANK` | off | Set to `1` to enable cross-encoder rerank |
 | `TECHJAM_CROSS_ENCODER_TOP_N` | `15` | Number of top rule-scored candidates to rescore |
 | `TECHJAM_CROSS_ENCODER_WEIGHT` | `2.0` | How much cross-encoder score is added (tuned via quick sweep) |
+| `TECHJAM_CROSS_ENCODER_DISABLE` | off | Set to `1` to run rule-only (baseline comparisons only) |
 
 Example with explicit overrides:
 
 ```bash
-TECHJAM_CROSS_ENCODER_RERANK=1 \
 TECHJAM_CROSS_ENCODER_TOP_N=15 \
 TECHJAM_CROSS_ENCODER_WEIGHT=2.0 \
 python3 -m evaluator.local_evaluator
@@ -93,23 +88,11 @@ Results saved to `cross_encoder_sweep_results.json`. Resume after interrupt:
 python3 -m scripts.cross_encoder_sweep --mode quick --resume
 ```
 
-Confirm the best config on the **full 200 sessions** before submitting with cross-encoder enabled.
+Confirm the best config on the **full 200 sessions** before submitting.
 
 ---
 
-## 4. Offline fallback (for final / no-network eval)
-
-If **any** of the following is true, the agent runs **rule-based only** (no cross-encoder):
-
-- `TECHJAM_CROSS_ENCODER_RERANK` is unset or not `1`
-- `sentence-transformers` is not installed
-- Model download fails
-
-No code changes needed — same `python3 -m evaluator.local_evaluator` command works.
-
----
-
-## 5. Other useful commands
+## 4. Other useful commands
 
 ```bash
 # Candidate pool recall (retrieval only, not full agent score)
@@ -119,9 +102,11 @@ python3 -m scripts.recall_check
 python3 -m unittest tests.test_rerank
 ```
 
+Unit tests disable the cross-encoder via `TECHJAM_CROSS_ENCODER_DISABLE=1` so they stay fast and offline-friendly.
+
 ---
 
-## 6. What not to commit
+## 5. What not to commit
 
 - `data/catalog.jsonl` (gitignored — download separately)
 - `.venv/`
@@ -131,36 +116,30 @@ python3 -m unittest tests.test_rerank
 
 ---
 
-## 7. For Devpost / submission report (copy-paste starter)
+## 6. For Devpost / submission report (copy-paste starter)
 
 **Development tools:** Python 3.10+, venv, Cursor/VS Code
 
-**Libraries (optional path):**
-- `sentence-transformers` — cross-encoder rerank
+**Libraries:**
+- `sentence-transformers` — cross-encoder rerank (required)
 - PyTorch — dependency of sentence-transformers
 
-**Model (optional):**
-- `cross-encoder/ms-marco-MiniLM-L-6-v2` — pretrained on MS MARCO; not fine-tuned on competition data
+**Model:**
+- `cross-encoder/ms-marco-MiniLM-L-6-v2` — pretrained on MS MARCO; not fine-tuned on competition data; downloaded automatically on first run
 
-**Default path:** Rule-based retrieval (FTS5) + structured rerank. No network, no GPU required.
+**Pipeline:** FTS5 retrieval + structured rule rerank + cross-encoder second stage on the top 15 candidates.
 
-**Optional path:** Cross-encoder second stage. Requires `pip install -r requirements-cross-encoder.txt` and `TECHJAM_CROSS_ENCODER_RERANK=1`. Slower (~5–15× eval time on CPU).
+**Network:** Required once for dependency install and model download; subsequent runs are offline if the model cache is warm.
 
 **Limitations:**
 - Cross-encoder weight/top_n tuned on public quick sweep; private 800 sessions may differ
-- Rule-only fallback always available for offline scoring
 
 ---
 
-## 8. Reproduce reported scores
+## 7. Reproduce reported scores
 
 ```bash
-# Rule-only (recommended offline submission path)
 python3 -m evaluator.local_evaluator
-
-# With cross-encoder (optional)
-pip install -r requirements-cross-encoder.txt
-TECHJAM_CROSS_ENCODER_RERANK=1 python3 -m evaluator.local_evaluator
 ```
 
 Compare `recommended_technical_score` in terminal output or `results.json`.

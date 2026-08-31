@@ -338,7 +338,7 @@ def rerank(
         previous = scored.get(parent_asin)
         if previous is None or total > previous:
             scored[parent_asin] = total
-    if cross_encoder is not None and cross_encoder.enabled:
+    if cross_encoder is not None:
         scored = cross_encoder.boost_scores(scored, state, active_plan, catalog)
     return [
         parent_asin

@@ -1,0 +1,2 @@
+# Cross-encoder second-stage rerank (required by default agent pipeline).
+sentence-transformers>=2.7.0

@@ -153,15 +153,15 @@ def main() -> None:
     completed = {_config_key(row["top_n"], row["weight"]) for row in payload.get("runs", [])}
 
     if not args.skip_baseline and payload.get("baseline") is None:
-        os.environ["TECHJAM_CROSS_ENCODER_RERANK"] = "0"
-        print("[baseline] rule-only (cross-encoder off)", flush=True)
+        os.environ["TECHJAM_CROSS_ENCODER_DISABLE"] = "1"
+        print("[baseline] rule-only (cross-encoder disabled)", flush=True)
         start = time.perf_counter()
         payload["baseline"] = run_once(agent, samples, catalog_ids, categories, products)
         _print_row("[baseline]", payload["baseline"], time.perf_counter() - start)
         _save_output(args.output, payload)
         print(flush=True)
 
-    os.environ["TECHJAM_CROSS_ENCODER_RERANK"] = "1"
+    os.environ.pop("TECHJAM_CROSS_ENCODER_DISABLE", None)
     run_index = 0
     for top_n in top_ns:
         for weight in weights:
@@ -206,7 +206,6 @@ def main() -> None:
             delta = f"  (baseline {baseline_score:.6f}, delta {best['technical_score'] - baseline_score:+.6f})"
         print("\n=== RECOMMENDED ===", flush=True)
         print(
-            f"export TECHJAM_CROSS_ENCODER_RERANK=1\n"
             f"export TECHJAM_CROSS_ENCODER_TOP_N={best['top_n']}\n"
             f"export TECHJAM_CROSS_ENCODER_WEIGHT={best['weight']}\n"
             f"# score={best['technical_score']:.6f}{delta}",

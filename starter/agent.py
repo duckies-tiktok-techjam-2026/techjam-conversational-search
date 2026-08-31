@@ -23,6 +23,7 @@ class Agent:
         self._load_products()
         self.candidate_index = CandidateIndex(self.catalog_path)
         self.cross_encoder_reranker = CrossEncoderReranker()
+        self.cross_encoder_reranker.warm_up()
 
     def _load_products(self) -> None:
         with self.catalog_path.open(encoding="utf-8") as handle:

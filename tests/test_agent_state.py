@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +10,11 @@ from starter.agent import Agent
 
 
 class AgentStateIntegrationTest(unittest.TestCase):
+    def setUp(self) -> None:
+        os.environ["TECHJAM_CROSS_ENCODER_DISABLE"] = "1"
+
+    def tearDown(self) -> None:
+        os.environ.pop("TECHJAM_CROSS_ENCODER_DISABLE", None)
     def test_agent_uses_stateful_query_and_reset_isolates_sessions(self) -> None:
         products = [
             {

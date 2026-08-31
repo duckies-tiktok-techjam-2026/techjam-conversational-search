@@ -1,3 +1,2 @@
-# Optional cross-encoder second-stage rerank (TECHJAM_CROSS_ENCODER_RERANK=1).
-# Agent runs without this installed — rule-based rerank only.
-sentence-transformers>=2.7.0
+# Kept for backward compatibility — use requirements.txt instead.
+-r requirements.txt
