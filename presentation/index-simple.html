@@ -13,245 +13,277 @@
       --text: #0a0a0a;
       --muted: #8b939d;
       --accent: #0a97c4;
+      --cyan: #25f4ee;
       --accent-soft: rgba(37, 244, 238, 0.16);
       --optional: #7c5cff;
       --success: #0ca678;
+      --red: #fe2c55;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { height: 100%; }
 
     body {
       font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
-      line-height: 1.55;
-      min-height: 100vh;
-    }
-
-    header {
-      padding: 2rem 2rem 1rem;
-      max-width: 1100px;
-      margin: 0 auto;
-    }
-
-    header h1 {
-      font-size: 1.75rem;
-      font-weight: 600;
-      margin-bottom: 0.35rem;
-    }
-
-    header p {
-      color: var(--muted);
-      max-width: 640px;
-    }
-
-    .metrics {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      margin-top: 1.25rem;
-    }
-
-    .metric {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.5rem 0.85rem;
-      font-size: 0.85rem;
-    }
-
-    .metric strong { color: var(--success); }
-
-    main {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 1rem 2rem 3rem;
-      display: grid;
-      grid-template-columns: 1fr 340px;
-      gap: 1.5rem;
-      align-items: start;
-    }
-
-    @media (max-width: 900px) {
-      main { grid-template-columns: 1fr; }
-    }
-
-    .flowchart {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.5rem;
-    }
-
-    .flowchart h2 {
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      margin-bottom: 1.25rem;
-    }
-
-    .flow {
+      line-height: 1.5;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ------------------------------------------------------------ header */
+    header {
+      flex: 0 0 auto;
+      display: flex;
       align-items: center;
-      gap: 0;
-    }
-
-    .step {
-      width: 100%;
-      max-width: 420px;
-      background: var(--bg);
-      border: 2px solid var(--border);
-      border-radius: 10px;
-      padding: 0.85rem 1.1rem;
-      cursor: pointer;
-      transition: border-color 0.15s, background 0.15s, transform 0.1s;
-      text-align: center;
-    }
-
-    .step:hover {
-      border-color: var(--accent);
-      background: var(--surface-hover);
-    }
-
-    .step.active {
-      border-color: var(--accent);
-      background: var(--accent-soft);
-      box-shadow: 0 0 0 3px rgba(10, 151, 196, 0.25);
-    }
-
-    .step.optional { border-style: dashed; }
-    .step.optional .step-tag { color: var(--optional); }
-
-    .step-num {
-      font-size: 0.7rem;
-      color: var(--muted);
-      margin-bottom: 0.2rem;
-    }
-
-    .step-title {
-      font-weight: 600;
-      font-size: 0.95rem;
-    }
-
-    .step-sub {
-      font-size: 0.78rem;
-      color: var(--muted);
-      margin-top: 0.25rem;
-    }
-
-    .step-tag {
-      display: inline-block;
-      margin-top: 0.35rem;
-      font-size: 0.65rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--accent);
-    }
-
-    .arrow {
-      color: var(--muted);
-      font-size: 1.1rem;
-      padding: 0.35rem 0;
-      user-select: none;
-    }
-
-    .detail-panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem;
-      position: sticky;
-      top: 1rem;
-      min-height: 320px;
-    }
-
-    .detail-panel h3 {
-      font-size: 1.1rem;
-      margin-bottom: 0.5rem;
-    }
-
-    .detail-panel .detail-meta {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-bottom: 1rem;
-      padding-bottom: 0.75rem;
+      gap: 1rem;
+      padding: 0.55rem 1rem;
       border-bottom: 1px solid var(--border);
     }
 
-    .detail-panel ul {
-      margin: 0.75rem 0 0 1.1rem;
-      font-size: 0.88rem;
-    }
+    .brand { display: flex; align-items: baseline; gap: 0.6rem; min-width: 0; }
+    .brand h1 { font-size: 1.05rem; font-weight: 650; letter-spacing: -0.01em; white-space: nowrap; }
+    .brand .tagline { font-size: 0.75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    .detail-panel li { margin-bottom: 0.4rem; }
-
-    .detail-panel p {
-      font-size: 0.88rem;
+    .metrics { margin-left: auto; display: flex; gap: 0.4rem; flex-wrap: nowrap; }
+    .metric {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.28rem 0.7rem;
+      font-size: 0.75rem;
       color: var(--muted);
-      margin-top: 0.5rem;
+      white-space: nowrap;
+    }
+    .metric strong { color: var(--success); font-weight: 700; }
+
+    @media (max-width: 780px) { .brand .tagline { display: none; } }
+    @media (max-width: 620px) { .metric:nth-child(n+3) { display: none; } }
+
+    /* -------------------------------------------------------- canvas stage */
+    .stage {
+      flex: 1 1 auto;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 20% 15%, rgba(37, 244, 238, 0.10), transparent 55%),
+        radial-gradient(circle at 85% 85%, rgba(254, 44, 85, 0.06), transparent 55%),
+        var(--bg);
     }
 
-    .detail-panel code {
+    .viewport { position: absolute; inset: 0; overflow: hidden; cursor: grab; }
+    .viewport.panning { cursor: grabbing; }
+
+    .world {
+      position: absolute; left: 0; top: 0;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+    .world.animate { transition: transform 0.36s cubic-bezier(0.4, 0, 0.2, 1); }
+
+    /* ------------------------------------------------------------- wires */
+    .wires { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+
+    .wire {
+      fill: none;
+      stroke: #c8ced6;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      transition: stroke 0.18s;
+    }
+    .wire.loop { stroke-dasharray: 7 6; animation: march 1.1s linear infinite; }
+    .wire.hot { stroke: var(--success); stroke-width: 3; }
+    @keyframes march { to { stroke-dashoffset: -13; } }
+
+    .wire-label {
+      fill: var(--muted); font-size: 11px;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;
+    }
+
+    .flow-dot {
+      fill: #ffffff;
+      stroke: var(--accent);
+      stroke-width: 1.4;
+      filter: drop-shadow(0 0 3px color-mix(in srgb, var(--cyan) 80%, transparent));
+    }
+    .flow-dot.hot {
+      stroke: var(--success);
+      filter: drop-shadow(0 0 4px color-mix(in srgb, var(--success) 70%, transparent));
+    }
+
+    /* ------------------------------------------------------------- nodes */
+    .node {
+      position: absolute;
+      width: 196px; height: 96px;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      cursor: pointer;
+      font: inherit; color: inherit;
+      display: flex; flex-direction: column; justify-content: center; gap: 0.14rem;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+      animation: nodeIn 0.42s cubic-bezier(0.4, 0, 0.2, 1) both;
+      overflow: hidden;
+    }
+    @keyframes nodeIn {
+      from { opacity: 0; transform: translateY(10px) scale(0.96); }
+      to   { opacity: 1; transform: none; }
+    }
+    .node:hover { border-color: var(--accent); }
+    .node.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: 0 0 0 4px rgba(10, 151, 196, 0.18);
+    }
+
+    .node .n-num { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+    .node .n-title { font-weight: 650; font-size: 0.9rem; line-height: 1.2; letter-spacing: -0.005em; }
+    .node .n-sub { font-size: 0.71rem; color: var(--muted); line-height: 1.25; }
+    .node .n-tag {
+      position: absolute; top: 0; right: 0;
+      font-size: 0.54rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
+      padding: 0.1rem 0.4rem;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-bottom-left-radius: 8px;
+    }
+
+    .node.k-in   .n-tag { color: var(--muted);   background: rgba(139, 147, 157, 0.16); }
+    .node.k-out  { border-color: color-mix(in srgb, var(--success) 45%, var(--border)); }
+    .node.k-out  .n-tag { color: var(--success); background: rgba(12, 166, 120, 0.14); }
+    .node.k-opt  { border-style: dashed; }
+    .node.k-opt  .n-tag { color: var(--optional); background: rgba(124, 92, 255, 0.14); }
+    .node.k-loop { border-color: color-mix(in srgb, var(--optional) 40%, var(--border)); }
+    .node.k-loop .n-tag { color: var(--optional); background: rgba(124, 92, 255, 0.14); }
+
+    /* ---------------------------------------------------------- overlays */
+    .zoom {
+      position: absolute; left: 14px; bottom: 14px;
+      display: flex; flex-direction: column; gap: 6px; z-index: 5;
+    }
+    .zoom button {
+      width: 34px; height: 34px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: 9px;
+      font-size: 1rem; line-height: 1;
+      color: var(--text);
+      cursor: pointer;
+      display: grid; place-items: center;
+    }
+    .zoom button:hover { border-color: var(--accent); color: var(--accent); }
+
+    .hint {
+      position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+      font-size: 0.72rem; color: var(--muted);
+      pointer-events: none; white-space: nowrap;
+    }
+    @media (max-width: 640px) { .hint { display: none; } }
+
+    /* --------------------------------------------------------- detail panel */
+    .panel {
+      position: absolute; top: 14px; right: 14px;
+      width: 340px;
+      max-height: calc(100% - 90px);
+      overflow-y: auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem 1.1rem 1.1rem;
+      box-shadow: 0 14px 36px rgba(10, 20, 40, 0.14);
+      animation: panelIn 0.22s ease;
+      z-index: 6;
+    }
+    .panel[hidden] { display: none; }
+    @keyframes panelIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+    .panel .close {
+      position: absolute; top: 0.45rem; right: 0.55rem;
+      border: none; background: none; cursor: pointer;
+      font-size: 1rem; line-height: 1; color: var(--muted);
+    }
+    .panel .close:hover { color: var(--text); }
+
+    .panel h3 { font-size: 1.05rem; font-weight: 650; margin-right: 1.2rem; }
+    .panel .detail-meta {
+      font-size: 0.76rem; color: var(--muted);
+      margin: 0.35rem 0 0.75rem;
+      padding-bottom: 0.65rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel .lead { font-size: 0.85rem; color: var(--text); }
+    .panel ul { margin: 0.7rem 0 0 1.05rem; font-size: 0.82rem; color: var(--text); }
+    .panel li { margin-bottom: 0.35rem; }
+    .panel code {
       background: var(--bg);
-      padding: 0.1rem 0.35rem;
+      padding: 0.08rem 0.32rem;
       border-radius: 4px;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       color: var(--success);
     }
-
-    .detail-panel .example {
-      margin-top: 1rem;
-      padding: 0.75rem;
+    .panel .example {
+      margin-top: 0.9rem;
+      padding: 0.65rem 0.75rem;
       background: var(--bg);
       border-radius: 8px;
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       border-left: 3px solid var(--accent);
     }
 
-    .detail-panel .placeholder {
-      color: var(--muted);
-      font-size: 0.9rem;
-      padding-top: 2rem;
-      text-align: center;
+    @media (max-width: 620px) {
+      .panel {
+        left: 10px; right: 10px; width: auto;
+        top: auto; bottom: 10px;
+        max-height: 55%;
+      }
+      .zoom { bottom: auto; top: 12px; left: 12px; }
     }
 
-    footer {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 0 2rem 2rem;
-      font-size: 0.8rem;
-      color: var(--muted);
+    @media (prefers-reduced-motion: reduce) {
+      .world.animate { transition: none; }
+      .wire.loop { animation: none; }
+      .flow-dot { display: none; }
+      .node { animation: none; }
     }
   </style>
 </head>
 <body>
   <header>
-    <h1>Conversational Shopping Agent</h1>
-    <p>Multi-turn product search over 50k Amazon catalog items. Click any step in the pipeline to see what happens inside.</p>
+    <div class="brand">
+      <h1>Conversational Shopping Agent</h1>
+      <span class="tagline">Multi-turn product search over a 50k Amazon catalog</span>
+    </div>
     <div class="metrics">
       <span class="metric">TechnicalScore <strong>0.817</strong></span>
       <span class="metric">Hit@10 <strong>0.965</strong></span>
       <span class="metric">MTTC <strong>3.0</strong></span>
-      <span class="metric">Offline fallback <strong>yes</strong></span>
+      <span class="metric">Offline <strong>yes</strong></span>
     </div>
   </header>
 
-  <main>
-    <section class="flowchart">
-      <h2>Pipeline — click a step</h2>
-      <div class="flow" id="flow"></div>
-    </section>
+  <div class="stage" id="stage">
+    <div class="viewport" id="viewport">
+      <div class="world" id="world">
+        <svg class="wires" id="wires" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"></svg>
+      </div>
+    </div>
 
-    <aside class="detail-panel" id="detail-panel">
-      <p class="placeholder">← Select a step to view details</p>
-    </aside>
-  </main>
+    <div class="zoom">
+      <button id="z-in" title="Zoom in">+</button>
+      <button id="z-out" title="Zoom out">&minus;</button>
+      <button id="z-fit" title="Fit to screen">&#8862;</button>
+    </div>
 
-  <footer>
-    TechJam Conversational E-Commerce Search · Rule-based default · Cross-encoder optional via <code>TECHJAM_CROSS_ENCODER_RERANK=1</code>
-  </footer>
+    <div class="hint">drag to pan · scroll to zoom · click a stage for detail</div>
+
+    <aside class="panel" id="panel" hidden></aside>
+  </div>
 
   <script>
     const STEPS = [
@@ -401,46 +433,224 @@
       },
     ];
 
-    const flowEl = document.getElementById("flow");
-    const panelEl = document.getElementById("detail-panel");
+    /* ------------------------------------------------------------- layout */
+    const NODE_W = 196, NODE_H = 96, GAP = 68, LANE_Y = 40, MARGIN = 34;
+    const byId = (id) => STEPS.find((s) => s.id === id);
 
-    function renderDetail(step) {
-      panelEl.innerHTML = `
-        <h3>${step.title}</h3>
-        <div class="detail-meta">Step ${step.num} · ${step.tag} · <code>${step.file}</code></div>
-        <p style="color: var(--text); font-size: 0.9rem;">${step.summary}</p>
-        <ul>${step.bullets.map((b) => `<li>${b}</li>`).join("")}</ul>
-        <div class="example"><strong>Example</strong><br/>${step.example}</div>
-      `;
+    const lane = STEPS.filter((s) => s.id !== "question");
+    lane.forEach((s, i) => { s._x = MARGIN + i * (NODE_W + GAP); s._y = LANE_Y; });
+    const q = byId("question");
+    q._x = MARGIN + 3 * (NODE_W + GAP);
+    q._y = LANE_Y + NODE_H + 96;
+
+    const WORLD_W = lane[lane.length - 1]._x + NODE_W + MARGIN;
+    const WORLD_H = q._y + NODE_H + MARGIN;
+
+    const EDGES = [];
+    for (let i = 0; i < lane.length - 1; i++) EDGES.push({ from: lane[i].id, to: lane[i + 1].id, type: "h" });
+    EDGES.push({ from: "output", to: "question", type: "loop" });
+    EDGES.push({ from: "question", to: "input", type: "loop", label: "next turn ≤ 10" });
+
+    function edgePath(e) {
+      const a = byId(e.from), b = byId(e.to);
+      if (e.type === "h") {
+        const x1 = a._x + NODE_W, y1 = a._y + NODE_H / 2;
+        const x2 = b._x,          y2 = b._y + NODE_H / 2;
+        const dx = Math.max(28, (x2 - x1) * 0.5);
+        return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+      }
+      if (e.from === "output") { // output -> question : drop down, sweep left
+        const x1 = a._x + NODE_W / 2, y1 = a._y + NODE_H;
+        const x2 = b._x + NODE_W,     y2 = b._y + NODE_H / 2;
+        return `M ${x1} ${y1} C ${x1} ${y1 + 90}, ${x2 + 150} ${y2}, ${x2} ${y2}`;
+      }
+      // question -> input : sweep left, climb up
+      const x1 = a._x, y1 = a._y + NODE_H / 2;
+      const x2 = b._x + NODE_W / 2, y2 = b._y + NODE_H;
+      return `M ${x1} ${y1} C ${x1 - 150} ${y1}, ${x2} ${y2 + 90}, ${x2} ${y2}`;
     }
+
+    function labelPoint(e) {
+      const a = byId(e.from), b = byId(e.to);
+      const x1 = a._x, y1 = a._y + NODE_H / 2;
+      const x2 = b._x + NODE_W / 2, y2 = b._y + NODE_H;
+      return { x: (x1 + x2) / 2 - 150, y: (y1 + y2) / 2 + 46 };
+    }
+
+    /* ---------------------------------------------------------- rendering */
+    const world = document.getElementById("world");
+    const viewport = document.getElementById("viewport");
+    const svg = document.getElementById("wires");
+    const panel = document.getElementById("panel");
+
+    world.style.width = WORLD_W + "px";
+    world.style.height = WORLD_H + "px";
+    svg.setAttribute("viewBox", `0 0 ${WORLD_W} ${WORLD_H}`);
+    svg.setAttribute("width", WORLD_W);
+    svg.setAttribute("height", WORLD_H);
+
+    let markup =
+      `<defs>` +
+      `<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c8ced6"/></marker>` +
+      `<marker id="ah-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0ca678"/></marker>` +
+      `</defs>`;
+
+    EDGES.forEach((e, i) => {
+      const cls = "wire" + (e.type === "loop" ? " loop" : "");
+      markup += `<path id="w${i}" class="${cls}" d="${edgePath(e)}" marker-end="url(#ah)"/>`;
+      if (e.label) {
+        const lp = labelPoint(e);
+        markup += `<text class="wire-label" x="${lp.x}" y="${lp.y}" text-anchor="middle">${e.label}</text>`;
+      }
+      const dur = e.type === "loop" ? 3.4 : 2.4;
+      const n = 3;
+      let dots = `<g class="dots" data-edge="${i}">`;
+      for (let d = 0; d < n; d++) {
+        dots +=
+          `<circle class="flow-dot" r="4">` +
+          `<animateMotion dur="${dur}s" begin="${-(d * dur) / n}s" repeatCount="indefinite" calcMode="linear">` +
+          `<mpath href="#w${i}" xlink:href="#w${i}"/></animateMotion></circle>`;
+      }
+      dots += `</g>`;
+      markup += dots;
+    });
+    svg.innerHTML = markup;
 
     STEPS.forEach((step, i) => {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "step" + (step.optional ? " optional" : "");
+      const kind = step.id === "input" ? "k-in"
+        : step.id === "output" ? "k-out"
+        : step.id === "question" ? "k-loop"
+        : step.optional ? "k-opt" : "k-core";
+      btn.className = "node " + kind;
       btn.dataset.id = step.id;
-      btn.innerHTML = `
-        <div class="step-num">Step ${step.num}</div>
-        <div class="step-title">${step.title}</div>
-        <div class="step-sub">${step.sub}</div>
-        <div class="step-tag">${step.tag}${step.optional ? " · optional" : ""}</div>
-      `;
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".step").forEach((el) => el.classList.remove("active"));
-        btn.classList.add("active");
-        renderDetail(step);
-      });
-      flowEl.appendChild(btn);
-      if (i < STEPS.length - 1) {
-        const arrow = document.createElement("div");
-        arrow.className = "arrow";
-        arrow.textContent = "↓";
-        flowEl.appendChild(arrow);
-      }
+      btn.style.left = step._x + "px";
+      btn.style.top = step._y + "px";
+      btn.style.animationDelay = (i * 55) + "ms";
+      btn.innerHTML =
+        `<span class="n-tag">${step.tag}${step.optional ? " · opt" : ""}</span>` +
+        `<span class="n-num">Step ${step.num}</span>` +
+        `<span class="n-title">${step.title}</span>` +
+        `<span class="n-sub">${step.sub}</span>`;
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); select(step.id); });
+      world.appendChild(btn);
     });
 
-    // Default: select rule-based rerank (core story)
-    document.querySelector('[data-id="rerank"]').click();
+    /* ------------------------------------------------------- selection */
+    function renderDetail(step) {
+      panel.innerHTML =
+        `<button class="close" aria-label="Close">&times;</button>` +
+        `<h3>${step.title}</h3>` +
+        `<div class="detail-meta">Step ${step.num} · ${step.tag} · <code>${step.file}</code></div>` +
+        `<p class="lead">${step.summary}</p>` +
+        `<ul>${step.bullets.map((b) => `<li>${b}</li>`).join("")}</ul>` +
+        `<div class="example"><strong>Example</strong><br/>${step.example}</div>`;
+      panel.querySelector(".close").addEventListener("click", deselect);
+    }
+
+    function select(id) {
+      world.querySelectorAll(".node.active").forEach((n) => n.classList.remove("active"));
+      svg.querySelectorAll(".wire.hot").forEach((w) => { w.classList.remove("hot"); w.setAttribute("marker-end", "url(#ah)"); });
+      svg.querySelectorAll(".flow-dot.hot").forEach((d) => d.classList.remove("hot"));
+
+      const node = world.querySelector(`.node[data-id="${id}"]`);
+      if (node) node.classList.add("active");
+
+      EDGES.forEach((e, i) => {
+        if (e.from !== id && e.to !== id) return;
+        const w = svg.querySelector(`#w${i}`);
+        if (w) { w.classList.add("hot"); w.setAttribute("marker-end", "url(#ah-hot)"); }
+        svg.querySelectorAll(`.dots[data-edge="${i}"] .flow-dot`).forEach((d) => d.classList.add("hot"));
+      });
+
+      renderDetail(byId(id));
+      panel.hidden = false;
+    }
+
+    function deselect() {
+      world.querySelectorAll(".node.active").forEach((n) => n.classList.remove("active"));
+      svg.querySelectorAll(".wire.hot").forEach((w) => { w.classList.remove("hot"); w.setAttribute("marker-end", "url(#ah)"); });
+      svg.querySelectorAll(".flow-dot.hot").forEach((d) => d.classList.remove("hot"));
+      panel.hidden = true;
+    }
+
+    /* ----------------------------------------------------------- camera */
+    let cam = { x: 0, y: 0, k: 1 };
+    const clampK = (k) => Math.min(2.4, Math.max(0.25, k));
+
+    function apply(anim) {
+      world.classList.toggle("animate", !!anim);
+      world.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.k})`;
+      if (anim) setTimeout(() => world.classList.remove("animate"), 380);
+    }
+
+    function fit(anim = true) {
+      const r = viewport.getBoundingClientRect();
+      const pad = 46;
+      const k = clampK(Math.min((r.width - pad * 2) / WORLD_W, (r.height - pad * 2) / WORLD_H));
+      cam = { k, x: (r.width - WORLD_W * k) / 2, y: (r.height - WORLD_H * k) / 2 };
+      apply(anim);
+    }
+
+    function zoomAround(px, py, factor, anim) {
+      const k = clampK(cam.k * factor);
+      const ratio = k / cam.k;
+      cam.x = px - (px - cam.x) * ratio;
+      cam.y = py - (py - cam.y) * ratio;
+      cam.k = k;
+      apply(anim);
+    }
+
+    viewport.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const r = viewport.getBoundingClientRect();
+      zoomAround(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015), false);
+    }, { passive: false });
+
+    let drag = null;
+    viewport.addEventListener("pointerdown", (e) => {
+      if (e.target.closest(".node") || e.target.closest(".panel") || e.target.closest(".zoom")) return;
+      drag = { x: e.clientX, y: e.clientY, ox: cam.x, oy: cam.y, moved: 0 };
+      viewport.classList.add("panning");
+      viewport.setPointerCapture(e.pointerId);
+    });
+    viewport.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      drag.moved += Math.abs(dx) + Math.abs(dy);
+      cam.x = drag.ox + dx;
+      cam.y = drag.oy + dy;
+      apply(false);
+    });
+    viewport.addEventListener("pointerup", (e) => {
+      const wasDrag = drag && drag.moved > 4;
+      viewport.classList.remove("panning");
+      drag = null;
+      if (!wasDrag && !e.target.closest(".node") && !e.target.closest(".panel") && !e.target.closest(".zoom")) {
+        deselect();
+      }
+    });
+    viewport.addEventListener("dblclick", (e) => {
+      if (e.target.closest(".node")) return;
+      fit();
+    });
+
+    document.getElementById("z-in").addEventListener("click", () => {
+      const r = viewport.getBoundingClientRect();
+      zoomAround(r.width / 2, r.height / 2, 1.3, true);
+    });
+    document.getElementById("z-out").addEventListener("click", () => {
+      const r = viewport.getBoundingClientRect();
+      zoomAround(r.width / 2, r.height / 2, 1 / 1.3, true);
+    });
+    document.getElementById("z-fit").addEventListener("click", () => fit());
+
+    window.addEventListener("resize", () => fit(false));
+    window.addEventListener("keydown", (e) => { if (e.key === "Escape") deselect(); });
+
+    /* ------------------------------------------------------------- boot */
+    fit(false);
   </script>
 </body>
 </html>
