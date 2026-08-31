@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TechJam Agent — Interactive Pipeline</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --surface-hover: #243044;
+      --border: #2d3a4f;
+      --text: #e7ecf3;
+      --muted: #8b9cb3;
+      --accent: #3b82f6;
+      --accent-soft: rgba(59, 130, 246, 0.15);
+      --optional: #a78bfa;
+      --success: #34d399;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 2rem 2rem 1rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+    }
+
+    header p {
+      color: var(--muted);
+      max-width: 640px;
+    }
+
+    .metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+    }
+
+    .metric {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.85rem;
+      font-size: 0.85rem;
+    }
+
+    .metric strong { color: var(--success); }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1rem 2rem 3rem;
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 1.5rem;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+    }
+
+    .flowchart {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+
+    .flowchart h2 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 1.25rem;
+    }
+
+    .flow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+
+    .step {
+      width: 100%;
+      max-width: 420px;
+      background: var(--bg);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 0.85rem 1.1rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, transform 0.1s;
+      text-align: center;
+    }
+
+    .step:hover {
+      border-color: var(--accent);
+      background: var(--surface-hover);
+    }
+
+    .step.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+
+    .step.optional { border-style: dashed; }
+    .step.optional .step-tag { color: var(--optional); }
+
+    .step-num {
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-bottom: 0.2rem;
+    }
+
+    .step-title {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .step-sub {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+
+    .step-tag {
+      display: inline-block;
+      margin-top: 0.35rem;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+    }
+
+    .arrow {
+      color: var(--muted);
+      font-size: 1.1rem;
+      padding: 0.35rem 0;
+      user-select: none;
+    }
+
+    .detail-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      position: sticky;
+      top: 1rem;
+      min-height: 320px;
+    }
+
+    .detail-panel h3 {
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .detail-panel .detail-meta {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .detail-panel ul {
+      margin: 0.75rem 0 0 1.1rem;
+      font-size: 0.88rem;
+    }
+
+    .detail-panel li { margin-bottom: 0.4rem; }
+
+    .detail-panel p {
+      font-size: 0.88rem;
+      color: var(--muted);
+      margin-top: 0.5rem;
+    }
+
+    .detail-panel code {
+      background: var(--bg);
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      color: var(--success);
+    }
+
+    .detail-panel .example {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: var(--bg);
+      border-radius: 8px;
+      font-size: 0.82rem;
+      border-left: 3px solid var(--accent);
+    }
+
+    .detail-panel .placeholder {
+      color: var(--muted);
+      font-size: 0.9rem;
+      padding-top: 2rem;
+      text-align: center;
+    }
+
+    footer {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 2rem 2rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Conversational Shopping Agent</h1>
+    <p>Multi-turn product search over 50k Amazon catalog items. Click any step in the pipeline to see what happens inside.</p>
+    <div class="metrics">
+      <span class="metric">TechnicalScore <strong>0.817</strong></span>
+      <span class="metric">Hit@10 <strong>0.965</strong></span>
+      <span class="metric">MTTC <strong>3.0</strong></span>
+      <span class="metric">Offline fallback <strong>yes</strong></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="flowchart">
+      <h2>Pipeline — click a step</h2>
+      <div class="flow" id="flow"></div>
+    </section>
+
+    <aside class="detail-panel" id="detail-panel">
+      <p class="placeholder">← Select a step to view details</p>
+    </aside>
+  </main>
+
+  <footer>
+    TechJam Conversational E-Commerce Search · Rule-based default · Cross-encoder optional via <code>TECHJAM_CROSS_ENCODER_RERANK=1</code>
+  </footer>
+
+  <script>
+    const STEPS = [
+      {
+        id: "input",
+        num: 0,
+        title: "Customer message",
+        sub: "Simulated shopper turn",
+        tag: "Input",
+        file: "evaluator/local_evaluator.py",
+        summary: "Each turn the customer sends a message. Scenarios: Buying, Browsing, Intent Override, Boundary.",
+        bullets: [
+          "Buying: discloses a hard constraint early",
+          "Browsing: starts vague (\"still exploring\")",
+          "Intent override: changes preference on turn 3–4",
+          "Boundary: may say \"no preference\" for an attribute",
+        ],
+        example: "Turn 1: \"I'm looking for men's t-shirts. A key requirement is: fabric type: 100% cotton.\"",
+      },
+      {
+        id: "parse",
+        num: 1,
+        title: "Parse message",
+        sub: "parser.py",
+        tag: "Understand",
+        file: "starter/components/parser.py",
+        summary: "Extract structured constraints (material, color, budget…) and flags (override, boundary, feedback).",
+        bullets: [
+          "Closed vocab for material, color, feature, brand, budget",
+          "Detects override phrases (\"actually\", \"changed my mind\")",
+          "Detects boundary (\"no preference\", \"use your judgment\")",
+          "Lossy by design — misses words like \"jersey\", \"tagless\"",
+        ],
+        example: "\"100% cotton under $40\" → constraints: material=cotton, budget=maximum $40",
+      },
+      {
+        id: "session",
+        num: 2,
+        title: "Session store",
+        sub: "session_store.py",
+        tag: "Remember",
+        file: "starter/components/session_store.py",
+        summary: "Accumulates constraints across turns. Handles override (clear replaced attrs) and boundary (mark unconstrained).",
+        bullets: [
+          "Tracks disclosed / asked / unconstrained attributes",
+          "Override: demote old values to negative constraints",
+          "Persists category hint from opener (\"looking for …\")",
+          "Pre-override clues kept for retrieval, down-weighted in rank",
+        ],
+        example: "After override from polyester → cotton: old polyester becomes excluded; cotton attribute re-opened for questions.",
+      },
+      {
+        id: "plan",
+        num: 3,
+        title: "Build search plan",
+        sub: "search_plan.py + snippets.py",
+        tag: "Plan",
+        file: "starter/components/search_plan.py",
+        summary: "Turn session state into retrieval/rerank inputs: required terms, excluded terms, verbatim snippets.",
+        bullets: [
+          "exact_phrases = verbatim customer clues (not parser output)",
+          "snippet_terms feed token overlap in rerank",
+          "snippet_weights: pre-override clues at 0.35, post-override at 1.0",
+          "User profile preference_tags as soft optional terms",
+        ],
+        example: "Snippets: [\"fabric type: 100% cotton\", \"4.3 oz jersey knit\", \"tagless collar\"]",
+      },
+      {
+        id: "retrieve",
+        num: 4,
+        title: "Retrieve candidates",
+        sub: "retrieval.py · ~150 products",
+        tag: "Search",
+        file: "starter/components/retrieval.py",
+        summary: "FTS5 index over 50k catalog. Multi-path union: rare-term AND, conjunctive core, category, broad OR.",
+        bullets: [
+          "Snippets drive rare-term AND queries (verbatim text)",
+          "Path tiering: conjunctive matches beat loose OR hits",
+          "Structured includes for material / color / brand",
+          "Pool size: 150 (CANDIDATE_POOL_SIZE)",
+        ],
+        example: "Target usually in pool once enough clues disclosed (~98.5% recall fully disclosed @200).",
+      },
+      {
+        id: "rerank",
+        num: 5,
+        title: "Rule-based rerank",
+        sub: "rerank.py",
+        tag: "Score",
+        file: "starter/components/rerank.py",
+        summary: "Additive scoring: phrase match, snippet coverage, token overlap, attributes, penalties.",
+        bullets: [
+          "+ Exact phrase & per-clue token coverage on title/features/details",
+          "+ Hard attributes (material, color, category…)",
+          "− Wrong color/material, over budget, category mismatch",
+          "− Items shown after \"not quite right\" feedback",
+        ],
+        example: "Decoy cotton tee ranks high on \"cotton\"; target wins when tagless/jersey snippets match.",
+      },
+      {
+        id: "cross",
+        num: 6,
+        title: "Cross-encoder rerank",
+        sub: "cross_encoder_rerank.py · optional",
+        tag: "Optional",
+        optional: true,
+        file: "starter/components/cross_encoder_rerank.py",
+        summary: "Second stage on top 15 rule-scored items. Jointly scores (customer query, product text) pairs.",
+        bullets: [
+          "Model: cross-encoder/ms-marco-MiniLM-L-6-v2",
+          "final = rule_score + 2.0 × cross_encoder_score",
+          "Enabled only with TECHJAM_CROSS_ENCODER_RERANK=1",
+          "Skipped if sentence-transformers not installed (offline safe)",
+        ],
+        example: "Query + target product read together → target jumps from rank 3 to rank 1.",
+      },
+      {
+        id: "output",
+        num: 7,
+        title: "Top 10 recommendations",
+        sub: "agent.py respond()",
+        tag: "Output",
+        file: "starter/agent.py",
+        summary: "Return best-first list of parent_asin. Evaluator scores exact match in first 10 unique valid IDs.",
+        bullets: [
+          "Hit = target appears anywhere in Top 10",
+          "MRR = 1/rank (rank 1 is best)",
+          "Session ends on hit or after turn 10",
+        ],
+        example: "recommendations: [{\"parent_asin\": \"B0…\"}, …] up to 10 items",
+      },
+      {
+        id: "question",
+        num: 8,
+        title: "Clarification question",
+        sub: "questions.py",
+        tag: "Ask",
+        file: "starter/components/questions.py",
+        summary: "Choose next ask_attribute to pull one more constraint from the simulator.",
+        bullets: [
+          "Priority: feature first, then material/color…",
+          "Buying opener → skip redundant category asks",
+          "Turn ≥5: prefer \"other\" for bulk disclosure",
+          "Post-override: re-ask the replaced attribute",
+        ],
+        example: "message: \"What feature matters most?\" · ask_attribute: \"feature\"",
+      },
+    ];
+
+    const flowEl = document.getElementById("flow");
+    const panelEl = document.getElementById("detail-panel");
+
+    function renderDetail(step) {
+      panelEl.innerHTML = `
+        <h3>${step.title}</h3>
+        <div class="detail-meta">Step ${step.num} · ${step.tag} · <code>${step.file}</code></div>
+        <p style="color: var(--text); font-size: 0.9rem;">${step.summary}</p>
+        <ul>${step.bullets.map((b) => `<li>${b}</li>`).join("")}</ul>
+        <div class="example"><strong>Example</strong><br/>${step.example}</div>
+      `;
+    }
+
+    STEPS.forEach((step, i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "step" + (step.optional ? " optional" : "");
+      btn.dataset.id = step.id;
+      btn.innerHTML = `
+        <div class="step-num">Step ${step.num}</div>
+        <div class="step-title">${step.title}</div>
+        <div class="step-sub">${step.sub}</div>
+        <div class="step-tag">${step.tag}${step.optional ? " · optional" : ""}</div>
+      `;
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".step").forEach((el) => el.classList.remove("active"));
+        btn.classList.add("active");
+        renderDetail(step);
+      });
+      flowEl.appendChild(btn);
+      if (i < STEPS.length - 1) {
+        const arrow = document.createElement("div");
+        arrow.className = "arrow";
+        arrow.textContent = "↓";
+        flowEl.appendChild(arrow);
+      }
+    });
+
+    // Default: select rule-based rerank (core story)
+    document.querySelector('[data-id="rerank"]').click();
+  </script>
+</body>
+</html>

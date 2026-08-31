@@ -266,7 +266,13 @@ data/public_set.jsonl             200 labeled development sessions
 scripts/recall_check.py           candidate-pool recall diagnostic
 tests/                            component unit tests
 docs/                             competition contract, scoring config, baseline
+presentation/index.html           interactive pipeline walkthrough (open in a browser)
 ```
+
+`presentation/index.html` is a zero-dependency, offline HTML walkthrough of this pipeline: a
+zoomable flowchart where clicking any component drills into its internals, source excerpts and
+constants, plus views for the scoring model, the four scenarios and the results.
+See `presentation/README.md`.
 
 
 

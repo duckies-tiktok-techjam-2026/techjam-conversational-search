@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TechJam Conversational Search — Interactive Pipeline</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">CS</div>
+    <div>
+      <h1>Conversational E-Commerce Search</h1>
+      <p>Multi-turn shopping agent over a frozen 50,000-product Amazon catalog · TechJam</p>
+    </div>
+  </div>
+
+  <nav class="views" id="view-nav">
+    <button class="view-btn is-active" data-view="system">System</button>
+    <button class="view-btn" data-view="scoring">Scoring model</button>
+    <button class="view-btn" data-view="scenarios">Scenarios</button>
+    <button class="view-btn" data-view="results">Results</button>
+    <button class="view-btn" data-view="team">Team</button>
+  </nav>
+
+  <div class="kpis" id="kpis"></div>
+</header>
+
+<main>
+  <!-- ================= FLOWCHART VIEW ================= -->
+  <section class="stage" id="stage-flow">
+    <div class="canvas-wrap">
+      <div class="canvas-head">
+        <div class="crumbs" id="crumbs"></div>
+        <div class="canvas-tools">
+          <button id="btn-play" class="tool primary" title="Animate one full turn">▶ Play a turn</button>
+          <button id="btn-zoom-in" class="tool" title="Zoom in">＋</button>
+          <button id="btn-zoom-out" class="tool" title="Zoom out">−</button>
+          <button id="btn-fit" class="tool" title="Fit to screen (F)">Fit</button>
+          <button id="btn-up" class="tool" title="Zoom out one level (Esc)">↰ Back</button>
+        </div>
+      </div>
+
+      <div class="canvas" id="canvas">
+        <svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div class="hint">drag to pan · scroll to zoom · click a box to zoom in</div>
+        <div class="legend" id="legend"></div>
+      </div>
+
+      <div class="trace-bar" id="trace-bar" hidden>
+        <div class="trace-step" id="trace-step"></div>
+        <div class="trace-actions">
+          <button class="tool" id="trace-prev">‹ Prev</button>
+          <button class="tool" id="trace-next">Next ›</button>
+          <button class="tool" id="trace-stop">✕ Exit trace</button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="drawer" id="drawer">
+      <div class="drawer-empty" id="drawer-empty">
+        <div class="drawer-empty-icon">◎</div>
+        <h3>Click any box</h3>
+        <p>The canvas zooms to that component and this panel fills with what it actually does:
+           the source file, the constants that matter, the code, and why it is built that way.</p>
+        <p class="muted">Boxes with a <span class="chip chip-drill">⤢ drill in</span> badge open a
+           sub-flowchart of their internals.</p>
+      </div>
+      <div class="drawer-body" id="drawer-body" hidden></div>
+    </aside>
+  </section>
+
+  <!-- ================= SCORING VIEW ================= -->
+  <section class="stage stage-doc" id="stage-scoring" hidden>
+    <div class="doc" id="doc-scoring"></div>
+  </section>
+
+  <!-- ================= SCENARIOS VIEW ================= -->
+  <section class="stage stage-doc" id="stage-scenarios" hidden>
+    <div class="doc" id="doc-scenarios"></div>
+  </section>
+
+  <!-- ================= RESULTS VIEW ================= -->
+  <section class="stage stage-doc" id="stage-results" hidden>
+    <div class="doc" id="doc-results"></div>
+  </section>
+
+  <!-- ================= TEAM VIEW ================= -->
+  <section class="stage stage-doc" id="stage-team" hidden>
+    <div class="doc" id="doc-team"></div>
+  </section>
+</main>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
