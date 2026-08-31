@@ -228,8 +228,10 @@ function drawGraph() {
 
   const layerFrames = svgEl("g");
   const layerEdges = svgEl("g");
+  const layerFlow = svgEl("g", { class: "flow-layer" });
   const layerNodes = svgEl("g");
-  el.camera.append(layerFrames, layerEdges, layerNodes);
+  el.camera.append(layerFrames, layerEdges, layerFlow, layerNodes);
+  S.flowLayer = layerFlow;
 
   // frames
   for (const frame of g.frames || []) {
@@ -250,12 +252,14 @@ function drawGraph() {
     const cls = edge.kind === "thin" ? "edge edge-thin"
       : edge.kind === "dashed" ? "edge edge-dashed"
       : edge.kind === "loop" ? "edge edge-loop" : "edge";
+    const pathId = `flow-path-${S.edgeEls.length}`;
     const path = svgEl("path", {
+      id: pathId,
       class: cls, d: routePath(edge, from, to),
       "marker-end": `url(#${edge.kind === "loop" ? "arrow-loop" : "arrow"})`,
     });
     layerEdges.appendChild(path);
-    S.edgeEls.push({ edge, path });
+    S.edgeEls.push({ edge, path, pathId });
 
     if (edge.label) {
       const at = labelPoint(edge, from, to);
@@ -320,6 +324,7 @@ function selectNode(id, { zoom = false } = {}) {
   if (zoom) focusNode(node);
   renderDetail(node);
   highlightEdges(id);
+  renderFlow(id);
   syncHash();
 }
 
@@ -330,6 +335,46 @@ function highlightEdges(id) {
       "marker-end",
       `url(#${edge.from === id || edge.to === id ? "arrow-hot" : edge.kind === "loop" ? "arrow-loop" : "arrow"})`,
     );
+  }
+}
+
+const XLINK_NS = "http://www.w3.org/1999/xlink";
+
+function clearFlow() {
+  if (S.flowLayer) S.flowLayer.textContent = "";
+}
+
+/** Send small dots travelling along every edge touching `id`, in the
+ *  direction information actually flows (path start -> path end). */
+function renderFlow(id) {
+  clearFlow();
+  if (!S.flowLayer || !S.edgeEls) return;
+
+  for (const { edge, pathId } of S.edgeEls) {
+    if (edge.from !== id && edge.to !== id) continue;
+    const incoming = edge.to === id;
+    const dur = edge.kind === "loop" ? 2.2 : 1.5;
+    const count = 3;
+
+    for (let i = 0; i < count; i++) {
+      const dot = svgEl("circle", {
+        r: 4.2,
+        class: "flow-dot" + (incoming ? " in" : " out"),
+      });
+      const motion = svgEl("animateMotion", {
+        dur: `${dur}s`,
+        // negative begin => already mid-path at t0, so no dot parks at the origin
+        begin: `${-(i * dur) / count}s`,
+        repeatCount: "indefinite",
+        calcMode: "linear",
+        rotate: "auto",
+      });
+      const mpath = svgEl("mpath", { href: `#${pathId}` });
+      mpath.setAttributeNS(XLINK_NS, "xlink:href", `#${pathId}`);
+      motion.appendChild(mpath);
+      dot.appendChild(motion);
+      S.flowLayer.appendChild(dot);
+    }
   }
 }
 
@@ -395,6 +440,7 @@ function clearDetail() {
   el.drawerEmpty.hidden = false;
   el.drawerBody.hidden = true;
   el.drawerBody.innerHTML = "";
+  clearFlow();
 }
 
 const KW = /\b(def|class|return|if|elif|else|for|while|in|not|and|or|None|True|False|import|from|try|except|raise|with|as|lambda|continue|break|yield|assert)\b/g;
@@ -591,6 +637,8 @@ function stopTrace() {
   for (const box of el.svg.querySelectorAll(".nodebox")) {
     box.classList.remove("is-traced", "is-dim");
   }
+  highlightEdges(null);
+  clearFlow();
   fitGraph();
 }
 
@@ -614,6 +662,8 @@ function renderTrace() {
 
   const node = nodeById(step.node);
   if (node) focusNode(node, 1.35);
+  highlightEdges(step.node);
+  renderFlow(step.node);
 
   el.traceStep.innerHTML =
     `<b>${S.trace.i + 1}/${TRACE.steps.length} · ${esc(step.label)}</b> — ${esc(step.text)}`;
