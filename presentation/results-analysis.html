@@ -55,12 +55,14 @@
       letter-spacing: -0.022em;
       color: var(--text);
       margin-bottom: 26px;
+      text-align: center;
     }
 
     /* headline metrics — the scored aggregate over all 200 sessions */
     .metrics {
       display: flex;
       flex-wrap: wrap;
+      justify-content: center;
       gap: 10px;
       margin-bottom: 34px;
     }
@@ -84,6 +86,8 @@
     /* per-scenario breakdown */
     table {
       width: 100%;
+      max-width: 860px;
+      margin: 0 auto;
       border-collapse: collapse;
       font-variant-numeric: tabular-nums;
     }
