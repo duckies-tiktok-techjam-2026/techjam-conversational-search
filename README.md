@@ -61,28 +61,29 @@ startup (~90 MB).
 Rule-based retrieval + cross-encoder rerank, `python3 -m evaluator.local_evaluator`:
 
 
-| Metric                     | Score     | Weak-BM25 baseline |
-| -------------------------- | --------- | ------------------ |
-| Hit Rate@10                | **0.965** | 0.125              |
-| MRR                        | **0.583** | 0.068              |
-| MTTC (mean first-hit turn) | **3.00**  | 9.81               |
-| Efficiency                 | **0.800** | —                  |
-| **Technical Score**        | **0.817** | 0.107              |
+| Metric                     | Score     | Rule-only | Weak-BM25 baseline |
+| -------------------------- | --------- | --------- | ------------------ |
+| Hit Rate@10                | **0.965** | 0.965     | 0.125              |
+| MRR                        | **0.606** | 0.583     | 0.068              |
+| MTTC (mean first-hit turn) | **3.00**  | 3.00      | 9.81               |
+| Efficiency                 | **0.801** | 0.800     | —                  |
+| **Technical Score**        | **0.824** | 0.817     | 0.107              |
 
 
 `TechnicalScore = 0.50 · HitRate@10 + 0.30 · MRR + 0.20 · Efficiency`,
-`Efficiency = clip((11 − MTTC) / 10, 0, 1)`. Reported token usage is `0` (pure standard
-library). A full run takes roughly 40 seconds on a laptop.
+`Efficiency = clip((11 − MTTC) / 10, 0, 1)`. Reported token usage is `0` (no LLM calls).
+A full run takes roughly 90 seconds on a laptop with the cross-encoder enabled (~45 seconds
+rule-only via `TECHJAM_CROSS_ENCODER_DISABLE=1`).
 
 Per scenario:
 
 
 | Scenario        | n   | Hit@10 | MRR   | MTTC |
 | --------------- | --- | ------ | ----- | ---- |
-| boundary        | 10  | 1.000  | 0.613 | 4.00 |
-| browsing        | 80  | 0.975  | 0.567 | 2.96 |
-| buying          | 80  | 0.950  | 0.554 | 2.50 |
-| intent_override | 30  | 0.967  | 0.690 | 4.10 |
+| boundary        | 10  | 1.000  | 0.555 | 3.80 |
+| browsing        | 80  | 0.975  | 0.588 | 2.98 |
+| buying          | 80  | 0.950  | 0.569 | 2.50 |
+| intent_override | 30  | 0.967  | 0.765 | 4.10 |
 
 
 ---
