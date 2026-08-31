@@ -260,10 +260,10 @@
       <span class="tagline">Multi-turn product search over a 50k Amazon catalog</span>
     </div>
     <div class="metrics">
-      <span class="metric">TechnicalScore <strong>0.817</strong></span>
+      <span class="metric">TechnicalScore <strong>0.824</strong></span>
       <span class="metric">Hit@10 <strong>0.965</strong></span>
+      <span class="metric">MRR <strong>0.606</strong></span>
       <span class="metric">MTTC <strong>3.0</strong></span>
-      <span class="metric">Offline <strong>yes</strong></span>
     </div>
   </header>
 
@@ -387,16 +387,16 @@
         id: "cross",
         num: 6,
         title: "Cross-encoder rerank",
-        sub: "cross_encoder_rerank.py · optional",
-        tag: "Optional",
-        optional: true,
+        sub: "cross_encoder_rerank.py · always on",
+        tag: "Neural",
         file: "starter/components/cross_encoder_rerank.py",
-        summary: "Second stage on top 15 rule-scored items. Jointly scores (customer query, product text) pairs.",
+        summary: "Compulsory second stage on the top 15 rule-scored items. Jointly scores (customer query, product text) pairs.",
         bullets: [
-          "Model: cross-encoder/ms-marco-MiniLM-L-6-v2",
+          "Model: cross-encoder/ms-marco-MiniLM-L-6-v2 (~90 MB, auto-downloaded on first run)",
           "final = rule_score + 2.0 × cross_encoder_score",
-          "Enabled only with TECHJAM_CROSS_ENCODER_RERANK=1",
-          "Skipped if sentence-transformers not installed (offline safe)",
+          "sentence-transformers auto-installed from requirements.txt in Agent.__init__",
+          "Ordering only: MRR 0.583 → 0.606, Hit@10 unchanged",
+          "TECHJAM_CROSS_ENCODER_DISABLE=1 for the rule-only baseline (0.817)",
         ],
         example: "Query + target product read together → target jumps from rank 3 to rank 1.",
       },

@@ -175,14 +175,27 @@ property of retrieval only — the snippets-into-rerank change below does not to
 
 
 
-### Local score (2026-08-30, full public set, `python3 -m evaluator.local_evaluator`)
+### Local score (full public set, `python3 -m evaluator.local_evaluator`)
 
-Aggregate: **HitRate@10 0.965 · MRR 0.583 · MTTC 3.000 · Efficiency 0.800 · TechnicalScore
-0.817** (prior 0.945 / 0.572 / 3.690 / 0.731 / 0.790; before that 0.930 / 0.560 / 4.055 / 0.694 /
-0.772; 0.920 / 0.561 / 4.11 / 0.689 / 0.766; 0.915 / 0.552 / 4.31 / 0.669 / 0.757; 0.790 / 0.458 /
-4.64 / 0.637 / 0.660; pre-pipeline 0.450 / 0.191 / 7.71 / 0.330 / 0.348; weak-BM25 baseline 0.125 /
-0.068 / 9.81 / — / 0.107). Token usage 0 (pure stdlib). Run takes ~33s. `results.json` from this
-run is the current reference (gitignored).
+**Default pipeline — cross-encoder on (per `dc3622f`, 2026-08-31):**
+**HitRate@10 0.965 · MRR 0.606 · MTTC 3.00 · Efficiency 0.801 · TechnicalScore 0.824.** This
+is the reported number (matches `README.md`, `presentation/data.js`, `index.html`). Not
+independently re-run in this checkout — needs `sentence-transformers` + the ~90 MB
+`cross-encoder/ms-marco-MiniLM-L-6-v2` download; the local `results.json` (gitignored) still
+holds the older rule-only run and should be regenerated with the cross-encoder active.
+
+**Rule-only baseline — `TECHJAM_CROSS_ENCODER_DISABLE=1`:** HitRate@10 0.965 · MRR 0.583 ·
+MTTC 3.000 · Efficiency 0.800 · TechnicalScore **0.817** (re-confirmed 2026-08-31, byte-
+identical to the old committed `results.json`). Progression to this point (Hit / MRR / MTTC /
+Eff / TS): 0.790 / 0.458 / 4.64 / 0.637 / 0.660 → 0.915 / 0.552 / 4.31 / 0.669 / 0.757 →
+0.920 / 0.561 / 4.11 / 0.689 / 0.766 → 0.930 / 0.560 / 4.055 / 0.694 / 0.772 → 0.945 / 0.572 /
+3.690 / 0.731 / 0.790 → 0.965 / 0.583 / 3.00 / 0.800 / 0.817; pre-pipeline 0.450 / 0.191 /
+7.71 / 0.330 / 0.348; weak-BM25 baseline 0.125 / 0.068 / 9.81 / — / 0.107. Token usage 0.
+
+**Open risk:** with no network `Agent.__init__` → `warm_up()` raises (it auto-`pip install`s
+from `requirements.txt`, then `RuntimeError`s if the model can't load) — there is no silent
+fallback to 0.817 on that path, so a fully offline final scoring run would fail to construct
+the agent unless the dep is vendored and the model pre-cached (see Open items).
 
 Recent moves (oldest first):
 
@@ -218,34 +231,52 @@ target); (2) turn-aware question selection in `questions.py`; (3) a category-mis
 `rerank.score_product`; plus a `session_store.py` field. This is the move that closed
 `intent_override`: Hit 0.833 → 0.967, MRR 0.619 → 0.690, MTTC 5.43 → 4.10. MTTC also dropped
 across the other three (aggregate 3.69 → 3.00).
-- (no score change) `15636a9` adds a **cross-encoder second stage** —
-`starter/components/cross_encoder_rerank.py`, `requirements.txt`
-(`sentence-transformers`). On by default; model weights download on first agent
-startup. Env vars `TECHJAM_CROSS_ENCODER_TOP_N` / `_WEIGHT` tune it;
-`TECHJAM_CROSS_ENCODER_DISABLE=1` opts out for baseline comparisons only.
-`scripts/cross_encoder_sweep.py` tunes them.
+- (no score change at the time) `15636a9` adds a **cross-encoder second stage** —
+`starter/components/cross_encoder_rerank.py`, `requirements.txt` (`sentence-transformers`).
+Introduced as **opt-in** (`TECHJAM_CROSS_ENCODER_RERANK=1`) with a graceful offline fallback:
+missing dep or model → `enabled` is `False` and `boost_scores` returns the rule scores
+untouched. `scripts/cross_encoder_sweep.py` tunes `TECHJAM_CROSS_ENCODER_TOP_N` / `_WEIGHT`
+(swept defaults: top_n 15, weight 2.0; `final = rule_score + 2.0·ce_score` over the top 15).
+- `0.817 → ≈0.824` — `dc3622f` (2026-08-31) makes the cross-encoder **compulsory**. Removes the
+`RERANK` opt-in so every evaluator run uses it; `Agent.__init__` calls `warm_up()` which
+`_ensure_model(required=True)` — on missing dep it runs `pip install -r requirements.txt`, on
+model-load failure it **raises `RuntimeError`** (no silent fallback on this path). Only
+`TECHJAM_CROSS_ENCODER_DISABLE=1` opts out, for baseline comparison. Effect (per `README.md` /
+`presentation/data.js`, not re-run here): MRR ≈0.583→0.606, TechnicalScore ≈0.817→0.824,
+Hit@10 unchanged (ordering-only stage). The softer `enabled`/`cross_encoder=None` fallback
+paths still exist but are only reached under `DISABLE=1` or in unit tests.
 
 
-| Scenario        | n   | Hit@10 | MRR   | MTTC | (prior)              |
+Per scenario (default, cross-encoder on — `Hit@10 / MRR / MTTC`, with the `DISABLE=1`
+rule-only figure alongside):
+
+| Scenario        | n   | Hit@10 | MRR   | MTTC | (rule-only)          |
 | --------------- | --- | ------ | ----- | ---- | -------------------- |
-| boundary        | 10  | 1.000  | 0.613 | 4.00 | 1.000 / 0.613 / 5.00 |
-| browsing        | 80  | 0.975  | 0.567 | 2.96 | 0.975 / 0.567 / 3.11 |
-| buying          | 80  | 0.950  | 0.554 | 2.50 | 0.950 / 0.553 / 3.45 |
-| intent_override | 30  | 0.967  | 0.690 | 4.10 | 0.833 / 0.619 / 5.43 |
+| boundary        | 10  | 1.000  | 0.555 | 3.80 | 1.000 / 0.613 / 4.00 |
+| browsing        | 80  | 0.975  | 0.588 | 2.98 | 0.975 / 0.567 / 2.96 |
+| buying          | 80  | 0.950  | 0.569 | 2.50 | 0.950 / 0.554 / 2.50 |
+| intent_override | 30  | 0.967  | 0.765 | 4.10 | 0.967 / 0.690 / 4.10 |
 
 
-Reads: `c658e74` was a broad MTTC win — every scenario hits sooner (aggregate −0.69 turns), and
-the pre-override snippet fix finally moved `intent_override` on all three metrics, so it is no
-longer the weakest scenario (it now has the *highest* MRR, 0.690). `buying` (Hit 0.950, MRR
-0.554) is now the low scenario on MRR. Remaining headroom overall is still MRR: 0.583 against a
-0.965 hit rate means targets land mid-list, not at rank 1 — and Hit@10 is close to its ceiling.
+Reads: the cross-encoder is an ordering-only stage — Hit@10 is identical to the rule-only run
+in every scenario; it moves MRR. Biggest lift is `intent_override` (MRR 0.690 → 0.765), which
+now has the *highest* MRR of the four. `buying` (Hit 0.950, MRR 0.569) is the low scenario on
+MRR. Remaining headroom overall is still MRR: 0.606 against a 0.965 hit rate means targets
+land mid-list, not at rank 1 — and Hit@10 is close to its ceiling.
 
 Open items:
 
+- **Regenerate `results.json` with the cross-encoder on.** The local file (gitignored) is still
+the pre-`dc3622f` rule-only run; the 0.824 aggregate above is sourced from `README.md` /
+`presentation/data.js`, not from a run in this checkout.
+- **Offline final scoring may fail.** `docs/submission_rules.md` says scoring "may run offline
+with network disabled". As of `dc3622f`, `Agent.__init__` → `warm_up()` raises without the
+`sentence-transformers` install + the ~90 MB HF model. Either vendor the dep and pre-cache the
+model, or make the `required=True` path degrade to the rule ranking instead of raising.
 - Recompute the local score after any pipeline change; `results.json` from the latest run is the
 current reference (still gitignored).
-- `buying` MRR 0.554 is now the weakest per-scenario number — targets are in the Top 10 (Hit
-0.950) but land mid-list. Aggregate MRR (0.583) is the main headroom now that Hit@10 is near
+- `buying` MRR 0.569 is the weakest per-scenario number — targets are in the Top 10 (Hit
+0.950) but land mid-list. Aggregate MRR (0.606) is the main headroom now that Hit@10 is near
 ceiling.
 - `_quality_tiebreak` and the raw carried `retrieval_score` have never been sensitivity-checked
 against the (now much larger) snippet signals — cheap experiment, docs gap 6.
