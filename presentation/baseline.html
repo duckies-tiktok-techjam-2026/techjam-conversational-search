@@ -38,6 +38,7 @@
       height: 720px;
       flex: 0 0 auto;
       overflow: hidden;
+      cursor: pointer;
       transform-origin: center center;
       background:
         radial-gradient(circle at 10% 8%, rgba(37, 244, 238, 0.12), transparent 42%),
@@ -61,34 +62,30 @@
       transform: none;
       pointer-events: auto;
     }
-    .panel.leaving {
-      opacity: 0;
-      transform: translateX(-24px);
-    }
 
     /* ---------------------------------------------------------------- title */
     .panel.title {
       align-items: center;
       justify-content: center;
       text-align: center;
-      padding: 56px;
+      padding: 48px;
     }
     .title h1 {
-      font-size: 52px;
+      font-size: 34px;
       font-weight: 800;
       letter-spacing: -0.025em;
       color: var(--text);
-      max-width: 20ch;
+      white-space: nowrap;
     }
     .title .by {
-      margin-top: 22px;
+      margin-top: 20px;
       font-size: 20px;
       color: var(--muted);
       letter-spacing: 0.01em;
     }
 
     /* -------------------------------------------------------- shortcomings */
-    .panel.shortcomings { padding: 44px 56px 68px; }
+    .panel.shortcomings { padding: 44px 56px 48px; }
 
     .shortcomings h1 {
       font-size: 40px;
@@ -113,6 +110,12 @@
       padding: 34px 34px;
       display: flex;
       flex-direction: column;
+      transition: opacity 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    .card.dim { opacity: 0.38; }
+    .card.lit {
+      border-color: var(--provided);
+      box-shadow: 0 10px 34px rgba(10, 151, 196, 0.18);
     }
 
     /* top block — badge in the gutter, label + heading indented beside it */
@@ -175,41 +178,17 @@
       margin-top: 11px;
       max-width: 540px;
     }
-
-    /* ------------------------------------------------------------------ nav */
-    .nav {
-      position: absolute;
-      bottom: 26px;
-      right: 32px;
-      display: flex;
-      gap: 10px;
-      z-index: 5;
-    }
-    .nav button {
-      font: inherit;
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--provided);
-      background: var(--bg);
-      border: 1px solid rgba(10, 151, 196, 0.35);
-      border-radius: 999px;
-      padding: 9px 20px;
-      cursor: pointer;
-      transition: background 0.15s ease, border-color 0.15s ease;
-    }
-    .nav button:hover { background: rgba(10, 151, 196, 0.08); border-color: var(--provided); }
-    .nav button[hidden] { display: none; }
   </style>
 </head>
 <body>
   <div class="slide" id="slide">
 
-    <section class="panel title active" data-step="0">
+    <section class="panel title active">
       <h1>Shopping Copilot: AI Conversational Search and Recommendations</h1>
       <div class="by">by Team Duckiesss</div>
     </section>
 
-    <section class="panel shortcomings" data-step="1">
+    <section class="panel shortcomings">
       <h1>Shortcomings of the provided baseline agent</h1>
 
       <div class="grid">
@@ -278,40 +257,42 @@
         </div>
       </div>
     </section>
-
-    <div class="nav">
-      <button id="prev" hidden>&larr; Back</button>
-      <button id="next">Next &rarr;</button>
-    </div>
   </div>
 
   <script>
     (function () {
       var slide = document.getElementById("slide");
-      var panels = Array.prototype.slice.call(slide.querySelectorAll(".panel"));
-      var prevBtn = document.getElementById("prev");
-      var nextBtn = document.getElementById("next");
+      var titlePanel = slide.querySelector(".panel.title");
+      var shortPanel = slide.querySelector(".panel.shortcomings");
+      var cards = Array.prototype.slice.call(shortPanel.querySelectorAll(".card"));
+
+      // 0 = title; 1..4 = shortcomings slide with card N highlighted
+      var MAX = 4;
       var step = 0;
 
-      function show(n) {
-        n = Math.max(0, Math.min(panels.length - 1, n));
-        if (n === step) return;
-        var current = panels[step];
-        step = n;
-        current.classList.add("leaving");
-        current.classList.remove("active");
-        setTimeout(function () { current.classList.remove("leaving"); }, 460);
-        panels[step].classList.add("active");
-        prevBtn.hidden = step === 0;
-        nextBtn.hidden = step === panels.length - 1;
+      function render() {
+        titlePanel.classList.toggle("active", step === 0);
+        shortPanel.classList.toggle("active", step >= 1);
+        cards.forEach(function (card, i) {
+          var lit = step >= 1 && i === step - 1;
+          card.classList.toggle("lit", lit);
+          card.classList.toggle("dim", step >= 1 && !lit);
+        });
       }
 
-      nextBtn.addEventListener("click", function () { show(step + 1); });
-      prevBtn.addEventListener("click", function () { show(step - 1); });
+      function go(delta) {
+        var next = Math.max(0, Math.min(MAX, step + delta));
+        if (next === step) return;
+        step = next;
+        render();
+      }
+
+      slide.addEventListener("click", function () { go(1); });
       document.addEventListener("keydown", function (e) {
-        if (e.key === "ArrowRight" || e.key === "PageDown") show(step + 1);
-        if (e.key === "ArrowLeft" || e.key === "PageUp") show(step - 1);
+        if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") { e.preventDefault(); go(1); }
+        if (e.key === "ArrowLeft" || e.key === "PageUp") go(-1);
       });
+      render();
 
       // Scale the fixed 1280x720 slide to fit whatever window it is viewed in.
       function fit() {
