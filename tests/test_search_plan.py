@@ -87,7 +87,11 @@ class SearchPlanTest(unittest.TestCase):
         self.assertEqual(plan.required_terms, ["black", "cotton"])
         self.assertNotIn("leather", plan.required_terms)
         self.assertEqual(plan.excluded_terms, ["leather"])
-        self.assertEqual(plan.exact_phrases, ["actually cotton"])
+        # The pre-override clue is retained (demoted, not dropped -- see
+        # snippets._PRE_OVERRIDE_WEIGHT). It used to vanish here only because a
+        # colon-less turn 0 was discarded wholesale, which also threw away real
+        # turn-1 disclosures whenever the customer phrased one without a colon.
+        self.assertEqual(plan.exact_phrases, ["black leather", "actually cotton"])
 
 
 if __name__ == "__main__":

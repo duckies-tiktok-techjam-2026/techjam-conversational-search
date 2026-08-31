@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import re
-
 from copy import deepcopy
 
 from .models import Constraint, ParsedMessage, SessionState
-
-_CATEGORY_OPENER_RE = re.compile(r"looking for (.+?)[,.]", re.IGNORECASE)
+from .snippets import category_from_opener
 
 
 class SessionStore:
@@ -76,9 +73,7 @@ class SessionStore:
 
         state.query_text = self._build_query_text(state)
         if not state.category_hint and state.messages:
-            match = _CATEGORY_OPENER_RE.search(str(state.messages[0]).lower())
-            if match:
-                state.category_hint = match.group(1).strip()
+            state.category_hint = category_from_opener(state.messages[0]) or state.category_hint
         return state
 
     @staticmethod

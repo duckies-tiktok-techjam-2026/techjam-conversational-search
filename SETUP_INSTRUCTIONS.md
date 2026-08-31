@@ -129,7 +129,7 @@ Unit tests disable the cross-encoder via `TECHJAM_CROSS_ENCODER_DISABLE=1` so th
 
 **Pipeline:** FTS5 retrieval + structured rule rerank + cross-encoder second stage on the top 15 candidates.
 
-**Network:** Required once for dependency install and model download; subsequent runs are offline if the model cache is warm.
+**Network:** Required once for dependency install and model download; subsequent runs are offline if the model cache is warm. With no network and no cache the agent still constructs and scores — the cross-encoder stage is skipped with a warning and the rule-only ranking is used (TechnicalScore 0.819 instead of 0.824).
 
 **Limitations:**
 - Cross-encoder weight/top_n tuned on public quick sweep; private 800 sessions may differ

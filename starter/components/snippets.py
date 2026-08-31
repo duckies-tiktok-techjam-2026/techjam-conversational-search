@@ -22,19 +22,51 @@ STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is",
     "it", "of", "on", "or", "the", "to", "with", "your", "you", "this", "that",
     "made", "quality", "great", "high", "will", "can", "size", "fit",
+    # Conversational scaffolding. These describe the *act of asking*, never a
+    # product attribute, so they must not survive into the ranking query -- a
+    # low-df word like "matters" is otherwise a prime pick for the rare-term AND
+    # in retrieval, which then matches almost nothing.
+    "i", "im", "me", "my", "am", "we", "us", "please", "thanks", "hi", "hello",
+    "looking", "look", "want", "need", "needs", "prefer", "preference", "like",
+    "what", "matters", "matter", "mainly", "mostly", "really", "actually",
+    "requirement", "key", "must", "should", "would", "there", "here", "these",
+    "those", "them", "something", "anything", "some", "any", "but", "still",
+    "yet", "more", "additional", "else", "one", "specific", "attribute",
+    "options", "option", "ask", "tell", "think", "know", "find", "get",
 }
 
 # Turns that carry no product information: boundary answers, "nothing more for
 # that attribute" non-answers, and generic negative feedback.
+# The first four alternatives are the simulator's current wordings; the rest cover
+# the same *intent* in other phrasings, because a missed non-answer is expensive --
+# the turn's filler tokens enter the ranking query as if they were a disclosure.
 NON_ANSWER_RE = re.compile(
     r"(?:do not|don't|dont) have (?:an?|any)\b[^.]*preference"
     r"|no preference"
     r"|use your judgment"
     r"|not quite right"
+    r"|no (?:strong )?(?:feelings|opinion|views)"
+    r"|not (?:fussy|picky|bothered)"
+    r"|(?:nothing|no more|not much) (?:else|further|more)\b"
+    r"|that'?s all i (?:have|can say|know)"
+    r"|either (?:one )?is fine|whatever you think|up to you|your call"
+    r"|(?:isn'?t|aren'?t|not) what i'?m (?:after|looking for)"
+    r"|doesn'?t matter|does not matter|don'?t mind|do not mind"
+    # A browsing opener carries only the category, which is extracted separately;
+    # everything else in it is filler that must not enter the ranking query.
+    r"|still exploring|just (?:browsing|looking)|not sure (?:exactly|yet)"
 )
 # "i'm looking for men's t-shirts, but i'm still exploring." -> the category is
-# handled separately; the rest of the opener is filler.
-OPENER_RE = re.compile(r"^i'?m looking for .*?[,.]\s*")
+# handled separately; the rest of the opener is filler. One lead-in pattern feeds
+# both the strip and the capture, so a change to how the customer opens a session
+# is a single edit -- session_store and retrieval both read the category through
+# category_from_opener.
+_OPENER_LEAD = r"(?:hi,?\s*)?(?:i'?m |i am |i )?(?:looking for|shopping for|want to find|need|want)\s+"
+OPENER_RE = re.compile(rf"^{_OPENER_LEAD}.*?[,.]\s*")
+CATEGORY_OPENER_RE = re.compile(rf"{_OPENER_LEAD}(.+?)[,.]", re.IGNORECASE)
+# Last resort when no opener verb is recognised: the customer names the category
+# in their first clause regardless of how they introduce it.
+FIRST_CLAUSE_RE = re.compile(r"^[^,.;:]{3,60}[,.;:]")
 SNIPPET_SPLIT_RE = re.compile(r";|(?<=\.)\s+")
 # Pre-override clues stay in the pool but rank below post-override text.
 _PRE_OVERRIDE_WEIGHT = 0.35
@@ -46,6 +78,30 @@ def tokens(text: str) -> list[str]:
         for token in TOKEN_RE.findall(str(text).lower())
         if len(token) > 1 and token not in STOPWORDS
     ]
+
+
+def category_from_opener(text: object) -> str:
+    """The category the customer named in their opening message, or ``""``."""
+    lowered = str(text or "").lower()
+    match = CATEGORY_OPENER_RE.search(lowered)
+    if match:
+        return match.group(1).strip()
+    clause = FIRST_CLAUSE_RE.match(lowered)
+    return clause.group(0).strip(" .,;:") if clause else ""
+
+
+def _strip_lead_in(text: str) -> str:
+    """Remove an opening category clause, but never the whole message.
+
+    A single-sentence opener ("i need boots -- it has to be black leather") has
+    its only punctuation at the end, so an unguarded strip deletes the disclosure
+    along with the lead-in.
+    """
+    for pattern in (OPENER_RE, FIRST_CLAUSE_RE):
+        stripped = pattern.sub("", text, count=1)
+        if stripped != text and tokens(stripped):
+            return stripped
+    return text
 
 
 def _override_start_index(parsed_messages) -> int | None:
@@ -65,10 +121,12 @@ def disclosure_snippet_entries(state) -> list[tuple[str, int]]:
             continue
         if ":" in text:
             payload = text.split(":", 1)[1]
-        elif index == 0:
-            continue
         else:
-            payload = OPENER_RE.sub("", text)
+            # No lead-in colon. Drop the opening clause -- it names the category,
+            # which is carried separately -- but only if something survives. Turn 0
+            # used to be discarded wholesale here, which silently threw away the
+            # entire turn-1 disclosure whenever it was phrased without a colon.
+            payload = _strip_lead_in(text) if index == 0 else OPENER_RE.sub("", text)
         for part in SNIPPET_SPLIT_RE.split(payload):
             part = part.strip(" .,-")
             if tokens(part):

@@ -8,14 +8,13 @@ only job is to *contain the target*. Ordering is loose; ranking is a separate st
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .models import SessionState
-from .snippets import disclosure_snippets, tokens as _tokens
+from .snippets import category_from_opener, disclosure_snippets, tokens as _tokens
 
 # FTS5 columns, in order. parent_asin is UNINDEXED but still counts as a column
 # for bm25() weights, so it gets a 0.0 slot.
@@ -119,11 +118,7 @@ class CandidateIndex:
         if hint:
             return str(hint)
         messages = getattr(state, "messages", None) or []
-        if messages:
-            match = re.search(r"looking for (.+?)[,.]", str(messages[0]).lower())
-            if match:
-                return match.group(1)
-        return ""
+        return category_from_opener(messages[0]) if messages else ""
 
     # -------------------------------------------------------------------- main
 

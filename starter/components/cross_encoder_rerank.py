@@ -123,21 +123,32 @@ class CrossEncoderReranker:
         except ImportError:
             if not required:
                 return False
-            _install_dependencies()
-            from sentence_transformers import CrossEncoder
+            try:
+                _install_dependencies()
+                from sentence_transformers import CrossEncoder
+            except Exception as exc:
+                self._warn_unavailable(exc)
+                return False
 
         try:
             print(f"Loading cross-encoder model {_MODEL_NAME}...", flush=True)
             self._model = CrossEncoder(_MODEL_NAME)
         except Exception as exc:
-            message = (
-                f"Failed to load cross-encoder model {_MODEL_NAME}. "
-                "Check your network connection for the first-run download."
-            )
-            if required:
-                raise RuntimeError(message) from exc
+            self._warn_unavailable(exc)
             return False
         return True
+
+    @staticmethod
+    def _warn_unavailable(exc: Exception) -> None:
+        """Scoring may run with the network disabled (docs/submission_rules.md:59),
+        so an unavailable model degrades to the rule-only ranking instead of
+        failing Agent construction."""
+        print(
+            f"Cross-encoder unavailable ({exc.__class__.__name__}: {exc}). "
+            "Falling back to the rule-only ranking.",
+            file=sys.stderr,
+            flush=True,
+        )
 
     def boost_scores(
         self,

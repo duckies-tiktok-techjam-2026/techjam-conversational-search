@@ -133,10 +133,17 @@ then picks what is actually selective by document frequency and drops `df == 0` 
 would otherwise make their AND unsatisfiable. Path A relaxes 4-term AND → 2-term AND → OR
 before giving up. Structured includes still read `positive_constraints` for
 material/color/brand.
-- `snippets.py` — shared by retrieval and rerank: `disclosure_snippets(state)` (above) and
-`tokens()`. Split out so the query that *ranks* a candidate is the query that *found* it; the
-simulator quotes the target's own `features` / `details` back at us, so a snippet is often a
-verbatim substring of the target row and of almost nothing else.
+- `snippets.py` — shared by retrieval and rerank: `disclosure_snippets(state)` (above),
+`tokens()`, and `category_from_opener()` (the single home for the opener regex —
+`session_store` and `retrieval` both import it; there used to be three copies). Split out so
+the query that *ranks* a candidate is the query that *found* it. The simulator quotes the
+target's own `features` / `details` back at us, so a snippet is often a verbatim substring of
+the target row — but note the `--authored-card` measurement below: that verbatim property is
+**not** what the score rests on (rewording it costs 0.000). What the score rested on was the
+*shape* of the phrasing — the `:` lead-in, the `I'm looking for` opener, the non-answer
+wordings — which is why extraction now degrades instead of discarding: `_strip_lead_in` never
+deletes a whole message, and `STOPWORDS` covers conversational scaffolding so meta words can't
+reach `_rare_terms`.
 - `rerank.py` — `rerank(candidates, state, plan, products)` scores every pooled
 `parent_asin` with the additive `score_product`: **+** carried retrieval score, exact-phrase
 hits (title/features/details; matched punctuation-insensitively via `_canonical`, since the
@@ -153,7 +160,17 @@ drives what the simulator discloses, so this matters and is not yet tuned.
 - `agent.py.__init__` makes **two** catalog passes (`_load_products` dict + `CandidateIndex`).
 - Fully standard-library / offline; no LLM calls.
 
-Dev tool: `python3 -m scripts.recall_check` — candidate-pool recall (is the target in the
+Dev tools:
+
+`python3 -m scripts.robustness_check [--ablate] [--limit N]` — does the score survive a
+customer who phrases things differently? Monkeypatches the evaluator's module-level
+`initial_message` / `customer_reply` / `materialize_hidden_fields` (nothing in `evaluator/` is
+modified) and reports TechnicalScore for four conditions: baseline, `--paraphrase` (six
+templates reworded), `--authored-card` (mined constraints rewritten as prose, `key: value`
+shape and 180-char truncation removed), and both. `--ablate` scores each rewrite alone to
+attribute the damage. See Open items for the results and what they changed.
+
+`python3 -m scripts.recall_check` — candidate-pool recall (is the target in the
 pool?) over the public set. It replays the evaluator's own `initial_message` /
 `customer_reply` turns through the real `parse_message` + `SessionStore`, so parser losses
 are visible; the stand-in agent always asks `other` (never excluded by
@@ -184,18 +201,23 @@ independently re-run in this checkout — needs `sentence-transformers` + the ~9
 `cross-encoder/ms-marco-MiniLM-L-6-v2` download; the local `results.json` (gitignored) still
 holds the older rule-only run and should be regenerated with the cross-encoder active.
 
-**Rule-only baseline — `TECHJAM_CROSS_ENCODER_DISABLE=1`:** HitRate@10 0.965 · MRR 0.583 ·
-MTTC 3.000 · Efficiency 0.800 · TechnicalScore **0.817** (re-confirmed 2026-08-31, byte-
-identical to the old committed `results.json`). Progression to this point (Hit / MRR / MTTC /
+**Rule-only baseline — `TECHJAM_CROSS_ENCODER_DISABLE=1`:** HitRate@10 0.965 · MRR 0.586 ·
+MTTC 2.99 · Efficiency 0.801 · TechnicalScore **0.8186** (2026-08-31, after the paraphrase-
+robustness work in Open items; the pre-robustness figure was 0.8173, byte-identical to the old
+committed `results.json`). Progression to this point (Hit / MRR / MTTC /
 Eff / TS): 0.790 / 0.458 / 4.64 / 0.637 / 0.660 → 0.915 / 0.552 / 4.31 / 0.669 / 0.757 →
 0.920 / 0.561 / 4.11 / 0.689 / 0.766 → 0.930 / 0.560 / 4.055 / 0.694 / 0.772 → 0.945 / 0.572 /
-3.690 / 0.731 / 0.790 → 0.965 / 0.583 / 3.00 / 0.800 / 0.817; pre-pipeline 0.450 / 0.191 /
+3.690 / 0.731 / 0.790 → 0.965 / 0.583 / 3.00 / 0.800 / 0.817 → 0.965 / 0.586 / 2.99 / 0.801 /
+0.819; pre-pipeline 0.450 / 0.191 /
 7.71 / 0.330 / 0.348; weak-BM25 baseline 0.125 / 0.068 / 9.81 / — / 0.107. Token usage 0.
 
-**Open risk:** with no network `Agent.__init__` → `warm_up()` raises (it auto-`pip install`s
-from `requirements.txt`, then `RuntimeError`s if the model can't load) — there is no silent
-fallback to 0.817 on that path, so a fully offline final scoring run would fail to construct
-the agent unless the dep is vendored and the model pre-cached (see Open items).
+**Offline path (resolved 2026-08-31):** with no network `Agent.__init__` → `warm_up()` now
+degrades instead of raising. `_ensure_model` catches both a failed `pip install` and a failed
+model load, prints a one-line warning to stderr via `_warn_unavailable`, and returns `False`,
+so `enabled` is `False` and `boost_scores` passes the rule scores through. Verified end-to-end
+with `PIP_NO_INDEX=1 HF_HUB_OFFLINE=1` and `sentence-transformers` absent: the agent constructs
+and answers. A fully offline scoring run therefore scores the rule-only pipeline (0.819) rather
+than failing.
 
 Recent moves (oldest first):
 
@@ -239,12 +261,14 @@ untouched. `scripts/cross_encoder_sweep.py` tunes `TECHJAM_CROSS_ENCODER_TOP_N` 
 (swept defaults: top_n 15, weight 2.0; `final = rule_score + 2.0·ce_score` over the top 15).
 - `0.817 → ≈0.824` — `dc3622f` (2026-08-31) makes the cross-encoder **compulsory**. Removes the
 `RERANK` opt-in so every evaluator run uses it; `Agent.__init__` calls `warm_up()` which
-`_ensure_model(required=True)` — on missing dep it runs `pip install -r requirements.txt`, on
-model-load failure it **raises `RuntimeError`** (no silent fallback on this path). Only
+`_ensure_model(required=True)` — on missing dep it runs `pip install -r requirements.txt`.
 `TECHJAM_CROSS_ENCODER_DISABLE=1` opts out, for baseline comparison. Effect (per `README.md` /
 `presentation/data.js`, not re-run here): MRR ≈0.583→0.606, TechnicalScore ≈0.817→0.824,
-Hit@10 unchanged (ordering-only stage). The softer `enabled`/`cross_encoder=None` fallback
-paths still exist but are only reached under `DISABLE=1` or in unit tests.
+Hit@10 unchanged (ordering-only stage). **Superseded 2026-08-31:** this commit also made a
+failed install or model load **raise `RuntimeError`**, which would have failed `Agent.__init__`
+outright on a network-disabled scoring run. `_ensure_model` now catches both and returns
+`False` via `_warn_unavailable`, so the `enabled` / `cross_encoder=None` fallback carries the
+offline path (0.819) instead of the run dying.
 
 
 Per scenario (default, cross-encoder on — `Hit@10 / MRR / MTTC`, with the `DISABLE=1`
@@ -269,12 +293,40 @@ Open items:
 - **Regenerate `results.json` with the cross-encoder on.** The local file (gitignored) is still
 the pre-`dc3622f` rule-only run; the 0.824 aggregate above is sourced from `README.md` /
 `presentation/data.js`, not from a run in this checkout.
-- **Offline final scoring may fail.** `docs/submission_rules.md` says scoring "may run offline
-with network disabled". As of `dc3622f`, `Agent.__init__` → `warm_up()` raises without the
-`sentence-transformers` install + the ~90 MB HF model. Either vendor the dep and pre-cache the
-model, or make the `required=True` path degrade to the rule ranking instead of raising.
 - Recompute the local score after any pipeline change; `results.json` from the latest run is the
 current reference (still gitignored).
+- **Paraphrase exposure is now measured, and the surprise is which half mattered.**
+`python3 -m scripts.robustness_check` (rule-only, 200 sessions) perturbs the simulator two
+independent ways and reports the cost:
+  - `--authored-card` — reword the mined constraints into prose, drop the `key: value` shape
+  and the mid-word 180-char truncation: **0.000**. The pipeline does *not* actually depend on
+  the public set's verbatim-quoting property; token overlap and `_snippet_coverage` carry it,
+  so `_phrase_score` / `_COVERAGE_WEIGHT` / the evaluator-identical `MATERIAL_TERMS`
+  `COLOR_TERMS` are far more robust than `snippets.py`'s own docstring implies. Widening those
+  lexicons was measured as pointless and deliberately not done.
+  - `--paraphrase` — reword the six customer templates: **−0.243 before the fix, −0.048 after.**
+  `--ablate` attributes it. Three literal-dependencies in `snippets.py` did the damage:
+  (1) `elif index == 0: continue` discarded the *entire turn-1 disclosure* whenever the lead-in
+  had no colon; (2) meta words ("what matters there is…") leaked into the query, where
+  `_rare_terms` ANDs a low-`df` word like "matters" and matches nothing; (3) `NON_ANSWER_RE`
+  missed reworded non-answers, letting a content-free turn pollute the query. Fixed by removing
+  the literal dependence, not by adding literals: one shared `_OPENER_LEAD` feeding both
+  `OPENER_RE` and `CATEGORY_OPENER_RE`, `_strip_lead_in` (never deletes a whole message),
+  `category_from_opener` with a first-clause fallback (now the single home for the opener regex
+  — `session_store` and `retrieval` import it, was three copies), a broadened `NON_ANSWER_RE`,
+  and ~45 conversational scaffolding words in `STOPWORDS`. Public set went 0.8173 → **0.8186**.
+  Locked in by `tests/test_paraphrase_robustness.py` (each assertion pairs a simulator-exact
+  phrasing with a reworded one). Caveat: the harness preserves content words, so −0.048 is a
+  lower bound, and it is rule-only — cross-encoder behaviour under paraphrase is unmeasured.
+- **Catalog statistics are barely mined.** All ten fields are read (FTS columns + rerank
+`_FIELD_WEIGHTS` + price + rating), but the only structure derived from 50,000 rows is
+`CandidateIndex.df` — and `doc_count` (`retrieval.py:57,:83`) is incremented and **never read**,
+so no IDF exists anywhere. `_token_overlap` / `_snippet_coverage` weight every matched token
+equally ("cotton" == "tagless"). Passing `df` / `doc_count` into rerank and weighting hits by
+`log(doc_count / df[token])` is the cheapest remaining MRR move — the table is already in
+memory, and unlike `_phrase_score` it is provenance-independent. Larger, unstarted: a facet
+index over `details` dict keys, `categories` as a taxonomy rather than a token bag, per-category
+price distributions, a brand vocabulary from `store`.
 - `buying` MRR 0.569 is the weakest per-scenario number — targets are in the Top 10 (Hit
 0.950) but land mid-list. Aggregate MRR (0.606) is the main headroom now that Hit@10 is near
 ceiling.
