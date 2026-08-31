@@ -1,6 +1,6 @@
 # Shopping Copilot: AI Conversational Search and Recommendations
 
-**TikTok TechJam 2026 Submission**: **Team Duckiesss**
+**Team Duckiesss**
 
 A conversational shopping agent that asks the right follow-up questions and narrows a
 50,000-product catalog down to the customer's intended item within a few turns.
@@ -9,19 +9,16 @@ A conversational shopping agent that asks the right follow-up questions and narr
 
 ## Project Overview
 
-The agent holds a short back-and-forth with a shopper: it reads their preference profile
+The agent holds a short back-and-forth with a shopper. It reads their preference profile
 and opening message, asks one clarifying question at a time, and returns a ranked shortlist
 of products that it refines as more is revealed. It handles shoppers who know exactly what
 they want, shoppers who start vague, shoppers who change their mind mid-conversation, and
 shoppers who have no opinion on something it asked about.
 
 Our approach combines a **rule-based retrieval and rerank core** with a **built-in cross-encoder
-second stage** — no LLM calls, no model training, no vector database. Dependencies and model
+second stage**. No LLM calls, no model training, no vector database. Dependencies and model
 weights download automatically on first startup; subsequent runs are offline-friendly once
-the Hugging Face cache is warm. **The agent also runs with the network disabled and no cache:**
-if the dependency or the model cannot be loaded, the cross-encoder stage is skipped and the
-rule-only ranking is used (TechnicalScore 0.819 instead of 0.824). `Agent.__init__` never
-fails on that path — see `docs/submission_rules.md:59`.
+the Hugging Face cache is warm. If the dependency or the model cannot be loaded, the cross-encoder stage is skipped and the rule-only ranking is used (TechnicalScore 0.819 instead of 0.824). `Agent.__init__` never fails on that path — see `docs/submission_rules.md:59`.
 
 ### Approach
 
@@ -67,10 +64,10 @@ Rule-based retrieval + cross-encoder rerank, `python3 -m evaluator.local_evaluat
 | Metric                     | Score     | Rule-only | Weak-BM25 baseline |
 | -------------------------- | --------- | --------- | ------------------ |
 | Hit Rate@10                | **0.965** | 0.965     | 0.125              |
-| MRR                        | **0.606** | 0.583     | 0.068              |
-| MTTC (mean first-hit turn) | **3.00**  | 3.00      | 9.81               |
-| Efficiency                 | **0.801** | 0.800     | —                  |
-| **Technical Score**        | **0.824** | 0.817     | 0.107              |
+| MRR                        | **0.606** | 0.586     | 0.068              |
+| MTTC (mean first-hit turn) | **3.00**  | 2.99      | 9.81               |
+| Efficiency                 | **0.801** | 0.801     | —                  |
+| **Technical Score**        | **0.824** | 0.819     | 0.107              |
 
 
 `TechnicalScore = 0.50 · HitRate@10 + 0.30 · MRR + 0.20 · Efficiency`,
@@ -193,28 +190,16 @@ set, independent of ranking and question policy.
 
 ## Limitations and Future Improvements
 
-- **MRR is the main headroom.** A 0.965 Hit Rate against a 0.583 MRR means targets land
+- **MRR is the main headroom.** A 0.965 Hit Rate against a 0.606 MRR means targets land
 reliably in the Top 10 but often mid-list rather than at rank 1. The additive rerank
 weights (`_COVERAGE_WEIGHT`, the carried retrieval score, the quality tie-break) were tuned
-by hand on the public set and have not been jointly optimized. A principled fit — or a
-learned ranker over the deterministic features — is the most promising next step.
+by hand on the public set and have not been jointly optimized. We believe that a principled fit or a learned ranker over the deterministic features is the most promising next step.
 - **The parser is lossy by design.** It only keeps tokens from fixed vocabularies
-(material, color, brand, feature). We worked around this by feeding verbatim text into
+(material, color, size etc). We worked around this by feeding verbatim text into
 retrieval and rerank, but structured constraint handling (budget parsing, size
-normalization, negation scope) is still shallow and occasionally misclassifies a turn.
+normalization, negation scope) is still shallow and occasionally misclassifies.
 - **Question policy is static.** Clarification attributes come from fixed priority lists,
 not from what would actually be most discriminating given the current candidate pool.
-An information-gain-based selector (which attribute best splits the remaining candidates?)
-should reduce turns to first hit.
-- **Paraphrase sensitivity is measured, not eliminated.** `python3 -m scripts.robustness_check`
-perturbs the simulator two ways and reports the cost. Rule-only, 200 sessions: rewording the
-six customer templates costs **−0.048** TechnicalScore (Hit 0.965 → 0.925); replacing the
-mined intent card with reworded prose costs **0.000**. So the pipeline does *not* depend on
-the public set's verbatim-quoting property the way its design notes imply — token overlap and
-`_snippet_coverage` carry it. What it did depend on was literal phrasing in `snippets.py`
-(the colon lead-in, the `I'm looking for` opener, the non-answer wordings); that cost −0.243
-before the current lead-in and stopword handling. Content words are preserved by the harness,
-so −0.048 is a lower bound.
 - **Catalog statistics are barely mined.** All ten catalog fields are read, but the only
 structure derived from the 50,000 rows is `CandidateIndex.df`; `doc_count` is incremented and
 never read, so no IDF is computed. `_token_overlap` and `_snippet_coverage` weight every
@@ -222,8 +207,8 @@ matched token equally — a hit on "cotton" scores the same as a hit on "tagless
 `details` dict keys are flattened to text rather than indexed as facets, and `categories` is
 used as a token bag rather than a hierarchy.
 - **Cross-encoder generalization is unverified.** Its weight and `top_n` were tuned on a
-public 50-session quick sweep; the private 800-session split may behave differently. The
-robustness numbers above are rule-only, so they say nothing about how the cross-encoder
+public 50-session quick sweep; the private 800-session split may behave differently. Our
+paraphrase-robustness testing was rule-only, so it says nothing about how the cross-encoder
 stage behaves under paraphrasing.
 - **Index build is uncached.** `CandidateIndex.__init__` rebuilds the FTS5 index and
 document-frequency table on every startup (~40 s). Persisting them would make iteration
@@ -231,7 +216,6 @@ and cold starts much faster.
 - **No true semantic retrieval.** Everything lexical is BM25 / FTS5. Paraphrased
 constraints that share no tokens with the catalog row are only caught if the candidate
 already made the pool and the cross-encoder can score it.
-
 ---
 
 
