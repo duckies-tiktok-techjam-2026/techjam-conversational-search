@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Baseline shortcomings</title>
+  <title>Shopping Copilot</title>
   <style>
     :root {
       --bg: #ffffff;
@@ -33,25 +33,69 @@
 
     /* fixed-size slide, scaled to the viewport by the script below */
     .slide {
+      position: relative;
       width: 1280px;
       height: 720px;
       flex: 0 0 auto;
+      overflow: hidden;
       transform-origin: center center;
-      padding: 48px 56px 44px;
       background:
         radial-gradient(circle at 10% 8%, rgba(37, 244, 238, 0.12), transparent 42%),
         radial-gradient(circle at 92% 94%, rgba(254, 44, 85, 0.06), transparent 44%),
         var(--bg);
-      display: flex;
-      flex-direction: column;
     }
 
-    h1 {
+    /* each step fills the slide; crossfade + slight slide between them */
+    .panel {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      transform: translateX(24px);
+      transition: opacity 0.45s ease, transform 0.45s ease;
+      pointer-events: none;
+    }
+    .panel.active {
+      opacity: 1;
+      transform: none;
+      pointer-events: auto;
+    }
+    .panel.leaving {
+      opacity: 0;
+      transform: translateX(-24px);
+    }
+
+    /* ---------------------------------------------------------------- title */
+    .panel.title {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 56px;
+    }
+    .title h1 {
+      font-size: 52px;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      color: var(--text);
+      max-width: 20ch;
+    }
+    .title .by {
+      margin-top: 22px;
+      font-size: 20px;
+      color: var(--muted);
+      letter-spacing: 0.01em;
+    }
+
+    /* -------------------------------------------------------- shortcomings */
+    .panel.shortcomings { padding: 44px 56px 68px; }
+
+    .shortcomings h1 {
       font-size: 40px;
       font-weight: 800;
       letter-spacing: -0.022em;
       color: var(--text);
-      margin-bottom: 28px;
+      margin-bottom: 24px;
     }
 
     .grid {
@@ -66,7 +110,7 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 16px;
-      padding: 40px 34px;
+      padding: 34px 34px;
       display: flex;
       flex-direction: column;
     }
@@ -131,83 +175,145 @@
       margin-top: 11px;
       max-width: 540px;
     }
+
+    /* ------------------------------------------------------------------ nav */
+    .nav {
+      position: absolute;
+      bottom: 26px;
+      right: 32px;
+      display: flex;
+      gap: 10px;
+      z-index: 5;
+    }
+    .nav button {
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--provided);
+      background: var(--bg);
+      border: 1px solid rgba(10, 151, 196, 0.35);
+      border-radius: 999px;
+      padding: 9px 20px;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .nav button:hover { background: rgba(10, 151, 196, 0.08); border-color: var(--provided); }
+    .nav button[hidden] { display: none; }
   </style>
 </head>
 <body>
   <div class="slide" id="slide">
-    <h1>Shortcomings of the provided baseline agent</h1>
 
-    <div class="grid">
-      <div class="card">
-        <div class="provided">
-          <span class="badge">1</span>
-          <div>
-            <div class="tag provided-tag">Provided</div>
-            <h2>A clarification question each turn</h2>
+    <section class="panel title active" data-step="0">
+      <h1>Shopping Copilot: AI Conversational Search and Recommendations</h1>
+      <div class="by">by Team Duckiesss</div>
+    </section>
+
+    <section class="panel shortcomings" data-step="1">
+      <h1>Shortcomings of the provided baseline agent</h1>
+
+      <div class="grid">
+        <div class="card">
+          <div class="provided">
+            <span class="badge">1</span>
+            <div>
+              <div class="tag provided-tag">Provided</div>
+              <h2>A clarification question each turn</h2>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="shortcoming">
+            <div class="tag shortcoming-tag">Shortcoming</div>
+            <h3>It never asks one.</h3>
+            <p>The customer only reveals a constraint when asked for that attribute, so nine of the ten turns return no new information.</p>
           </div>
         </div>
-        <div class="divider"></div>
-        <div class="shortcoming">
-          <div class="tag shortcoming-tag">Shortcoming</div>
-          <h3>It never asks one.</h3>
-          <p>The customer only reveals a constraint when asked for that attribute, so nine of the ten turns return no new information.</p>
-        </div>
-      </div>
 
-      <div class="card">
-        <div class="provided">
-          <span class="badge">2</span>
-          <div>
-            <div class="tag provided-tag">Provided</div>
-            <h2>Per-session state and a user profile</h2>
+        <div class="card">
+          <div class="provided">
+            <span class="badge">2</span>
+            <div>
+              <div class="tag provided-tag">Provided</div>
+              <h2>Per-session state and a user profile</h2>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="shortcoming">
+            <div class="tag shortcoming-tag">Shortcoming</div>
+            <h3>It reads only the current turn.</h3>
+            <p>Constraints never accumulate, the profile is unused, and an intent override or a &ldquo;no preference&rdquo; reply is not handled.</p>
           </div>
         </div>
-        <div class="divider"></div>
-        <div class="shortcoming">
-          <div class="tag shortcoming-tag">Shortcoming</div>
-          <h3>It reads only the current turn.</h3>
-          <p>Constraints never accumulate, the profile is unused, and an intent override or a &ldquo;no preference&rdquo; reply is not handled.</p>
-        </div>
-      </div>
 
-      <div class="card">
-        <div class="provided">
-          <span class="badge">3</span>
-          <div>
-            <div class="tag provided-tag">Provided</div>
-            <h2>Full-text search over 50,000 products</h2>
+        <div class="card">
+          <div class="provided">
+            <span class="badge">3</span>
+            <div>
+              <div class="tag provided-tag">Provided</div>
+              <h2>Full-text search over 50,000 products</h2>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="shortcoming">
+            <div class="tag shortcoming-tag">Shortcoming</div>
+            <h3>One query shape: all keywords joined by OR.</h3>
+            <p>It cannot require two attributes together, so a single rare word outranks a product matching the whole description.</p>
           </div>
         </div>
-        <div class="divider"></div>
-        <div class="shortcoming">
-          <div class="tag shortcoming-tag">Shortcoming</div>
-          <h3>One query shape: all keywords joined by OR.</h3>
-          <p>It cannot require two attributes together, so a single rare word outranks a product matching the whole description.</p>
-        </div>
-      </div>
 
-      <div class="card">
-        <div class="provided">
-          <span class="badge">4</span>
-          <div>
-            <div class="tag provided-tag">Provided</div>
-            <h2>A ranked Top-10 recommendation list</h2>
+        <div class="card">
+          <div class="provided">
+            <span class="badge">4</span>
+            <div>
+              <div class="tag provided-tag">Provided</div>
+              <h2>A ranked Top-10 recommendation list</h2>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="shortcoming">
+            <div class="tag shortcoming-tag">Shortcoming</div>
+            <h3>It returns the index's first ten rows unchanged.</h3>
+            <p>With no reranking stage, nothing demotes the wrong colour, an over-budget price, or an item the customer already rejected.</p>
           </div>
         </div>
-        <div class="divider"></div>
-        <div class="shortcoming">
-          <div class="tag shortcoming-tag">Shortcoming</div>
-          <h3>It returns the index's first ten rows unchanged.</h3>
-          <p>With no reranking stage, nothing demotes the wrong colour, an over-budget price, or an item the customer already rejected.</p>
-        </div>
       </div>
+    </section>
+
+    <div class="nav">
+      <button id="prev" hidden>&larr; Back</button>
+      <button id="next">Next &rarr;</button>
     </div>
   </div>
 
   <script>
-    // Scale the fixed 1280x720 slide to fit whatever window it is viewed in.
     (function () {
       var slide = document.getElementById("slide");
+      var panels = Array.prototype.slice.call(slide.querySelectorAll(".panel"));
+      var prevBtn = document.getElementById("prev");
+      var nextBtn = document.getElementById("next");
+      var step = 0;
+
+      function show(n) {
+        n = Math.max(0, Math.min(panels.length - 1, n));
+        if (n === step) return;
+        var current = panels[step];
+        step = n;
+        current.classList.add("leaving");
+        current.classList.remove("active");
+        setTimeout(function () { current.classList.remove("leaving"); }, 460);
+        panels[step].classList.add("active");
+        prevBtn.hidden = step === 0;
+        nextBtn.hidden = step === panels.length - 1;
+      }
+
+      nextBtn.addEventListener("click", function () { show(step + 1); });
+      prevBtn.addEventListener("click", function () { show(step - 1); });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowRight" || e.key === "PageDown") show(step + 1);
+        if (e.key === "ArrowLeft" || e.key === "PageUp") show(step - 1);
+      });
+
+      // Scale the fixed 1280x720 slide to fit whatever window it is viewed in.
       function fit() {
         var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
         slide.style.transform = "scale(" + s + ")";
