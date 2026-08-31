@@ -3,25 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TechJam Agent — Interactive Pipeline</title>
+  <title>TechJam Agent — Pipeline</title>
   <style>
     :root {
       --bg: #ffffff;
       --surface: #f7f8fa;
-      --surface-hover: #eef0f3;
       --border: #e2e5ea;
       --text: #0a0a0a;
       --muted: #8b939d;
       --accent: #0a97c4;
       --cyan: #25f4ee;
       --accent-soft: rgba(37, 244, 238, 0.16);
-      --optional: #7c5cff;
       --success: #0ca678;
-      --red: #fe2c55;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
     html, body { height: 100%; }
 
     body {
@@ -34,150 +30,285 @@
       overflow: hidden;
     }
 
-    /* ------------------------------------------------------------ header */
+    /* --------------------------------------------------------------- header */
     header {
       flex: 0 0 auto;
       display: flex;
       align-items: center;
       gap: 1rem;
-      padding: 0.55rem 1rem;
+      padding: 0.5rem 1rem;
       border-bottom: 1px solid var(--border);
     }
-
     .brand { display: flex; align-items: baseline; gap: 0.6rem; min-width: 0; }
-    .brand h1 { font-size: 1.05rem; font-weight: 650; letter-spacing: -0.01em; white-space: nowrap; }
-    .brand .tagline { font-size: 0.75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .brand h1 { font-size: 1.02rem; font-weight: 650; letter-spacing: -0.01em; white-space: nowrap; }
+    .brand .tagline { font-size: 0.74rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    .metrics { margin-left: auto; display: flex; gap: 0.4rem; flex-wrap: nowrap; }
+    .metrics { margin-left: auto; display: flex; gap: 0.4rem; }
     .metric {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 0.28rem 0.7rem;
-      font-size: 0.75rem;
+      padding: 0.26rem 0.68rem;
+      font-size: 0.74rem;
       color: var(--muted);
       white-space: nowrap;
     }
     .metric strong { color: var(--success); font-weight: 700; }
-
-    @media (max-width: 780px) { .brand .tagline { display: none; } }
+    @media (max-width: 860px) { .brand .tagline { display: none; } }
     @media (max-width: 620px) { .metric:nth-child(n+3) { display: none; } }
 
-    /* -------------------------------------------------------- canvas stage */
+    /* ---------------------------------------------------------------- stage */
     .stage {
       flex: 1 1 auto;
       position: relative;
       overflow: hidden;
       background:
-        radial-gradient(circle at 20% 15%, rgba(37, 244, 238, 0.10), transparent 55%),
-        radial-gradient(circle at 85% 85%, rgba(254, 44, 85, 0.06), transparent 55%),
+        radial-gradient(circle at 18% 12%, rgba(37, 244, 238, 0.10), transparent 55%),
+        radial-gradient(circle at 86% 88%, rgba(254, 44, 85, 0.06), transparent 55%),
         var(--bg);
     }
+    .layer { position: absolute; inset: 0; }
 
-    .viewport { position: absolute; inset: 0; overflow: hidden; cursor: grab; }
-    .viewport.panning { cursor: grabbing; }
-
-    .world {
-      position: absolute; left: 0; top: 0;
-      transform-origin: 0 0;
-      will-change: transform;
-    }
-    .world.animate { transition: transform 0.36s cubic-bezier(0.4, 0, 0.2, 1); }
-
-    /* ------------------------------------------------------------- wires */
-    .wires { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
-
-    .wire {
-      fill: none;
-      stroke: #c8ced6;
-      stroke-width: 2.5;
-      stroke-linecap: round;
-      transition: stroke 0.18s;
-    }
+    /* ----------------------------------------------------------------- wires */
+    .wires { position: absolute; inset: 0; overflow: visible; pointer-events: none; transition: opacity 0.3s; }
+    .wires.dim { opacity: 0; }
+    .wire { fill: none; stroke: #c8ced6; stroke-width: 2.5; stroke-linecap: round; }
     .wire.loop { stroke-dasharray: 7 6; animation: march 1.1s linear infinite; }
-    .wire.hot { stroke: var(--success); stroke-width: 3; }
     @keyframes march { to { stroke-dashoffset: -13; } }
-
     .wire-label {
-      fill: var(--muted); font-size: 11px;
-      font-family: "Segoe UI", system-ui, sans-serif;
+      fill: var(--muted); font-size: 11px; font-family: inherit;
       paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round;
     }
-
-    .flow-dot {
-      fill: #ffffff;
-      stroke: var(--accent);
-      stroke-width: 1.4;
+    .fd {
+      fill: #ffffff; stroke: var(--accent); stroke-width: 1.4;
       filter: drop-shadow(0 0 3px color-mix(in srgb, var(--cyan) 80%, transparent));
     }
-    .flow-dot.hot {
-      stroke: var(--success);
-      filter: drop-shadow(0 0 4px color-mix(in srgb, var(--success) 70%, transparent));
-    }
 
-    /* ------------------------------------------------------------- nodes */
+    /* ----------------------------------------------------------- group frame */
+    .frame {
+      position: absolute;
+      border: 2px dashed color-mix(in srgb, var(--accent) 45%, var(--border));
+      border-radius: 20px;
+      background: color-mix(in srgb, var(--cyan) 5%, transparent);
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      animation: pop 0.34s cubic-bezier(0.4, 0, 0.2, 1) both;
+    }
+    .frame.dim { opacity: 0; }
+    .frame-label {
+      position: absolute; top: -0.62rem; left: 18px;
+      padding: 0 0.5rem;
+      background: var(--bg);
+      font-size: 0.66rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.09em;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+    .frame-note {
+      position: absolute; bottom: -0.62rem; right: 18px;
+      padding: 0 0.5rem;
+      background: var(--bg);
+      font-size: 0.66rem; color: var(--muted);
+      white-space: nowrap;
+    }
+    @media (max-width: 700px) { .frame-note { display: none; } }
+
+    /* ----------------------------------------------------------------- nodes */
     .node {
       position: absolute;
-      width: 196px; height: 96px;
       background: var(--surface);
       border: 2px solid var(--border);
-      border-radius: 12px;
-      padding: 0.55rem 0.7rem;
+      border-radius: 13px;
+      padding: 0.5rem 0.7rem;
+      display: flex; flex-direction: column; justify-content: center; gap: 0.12rem;
       text-align: left;
       cursor: pointer;
       font: inherit; color: inherit;
-      display: flex; flex-direction: column; justify-content: center; gap: 0.14rem;
-      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-      animation: nodeIn 0.42s cubic-bezier(0.4, 0, 0.2, 1) both;
       overflow: hidden;
+      animation: pop 0.34s cubic-bezier(0.4, 0, 0.2, 1) both;
+      transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease,
+                  border-color 0.18s, box-shadow 0.18s, background 0.18s;
     }
-    @keyframes nodeIn {
-      from { opacity: 0; transform: translateY(10px) scale(0.96); }
+    @keyframes pop {
+      from { opacity: 0; transform: translateY(12px) scale(0.96); }
       to   { opacity: 1; transform: none; }
     }
     .node:hover { border-color: var(--accent); }
-    .node.active {
+    .node.group {
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+      background: linear-gradient(180deg, var(--accent-soft), var(--surface));
+    }
+    .node.away { opacity: 0; transform: scale(0.82) !important; pointer-events: none; }
+    .node.hero {
+      z-index: 4;
       border-color: var(--accent);
       background: var(--accent-soft);
-      box-shadow: 0 0 0 4px rgba(10, 151, 196, 0.18);
+      box-shadow: 0 12px 34px rgba(10, 20, 40, 0.16), 0 0 0 4px rgba(10, 151, 196, 0.16);
+      cursor: default;
     }
+    .node.hero .n-hint { display: none; }
 
-    .node .n-num { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
-    .node .n-title { font-weight: 650; font-size: 0.9rem; line-height: 1.2; letter-spacing: -0.005em; }
-    .node .n-sub { font-size: 0.71rem; color: var(--muted); line-height: 1.25; }
-    .node .n-tag {
+    .n-tag {
       position: absolute; top: 0; right: 0;
-      font-size: 0.54rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
+      font-size: 0.52rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
       padding: 0.1rem 0.4rem;
       color: var(--accent);
       background: var(--accent-soft);
       border-bottom-left-radius: 8px;
     }
+    .n-title { font-weight: 650; font-size: 0.92rem; line-height: 1.2; letter-spacing: -0.005em; }
+    .node.group .n-title { font-size: 1rem; }
+    .n-sub { font-size: 0.7rem; color: var(--muted); line-height: 1.25; }
+    .n-hint { margin-top: 0.2rem; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.03em; color: var(--accent); }
 
-    .node.k-in   .n-tag { color: var(--muted);   background: rgba(139, 147, 157, 0.16); }
-    .node.k-out  { border-color: color-mix(in srgb, var(--success) 45%, var(--border)); }
-    .node.k-out  .n-tag { color: var(--success); background: rgba(12, 166, 120, 0.14); }
-    .node.k-opt  { border-style: dashed; }
-    .node.k-opt  .n-tag { color: var(--optional); background: rgba(124, 92, 255, 0.14); }
-    .node.k-loop { border-color: color-mix(in srgb, var(--optional) 40%, var(--border)); }
-    .node.k-loop .n-tag { color: var(--optional); background: rgba(124, 92, 255, 0.14); }
-
-    /* ---------------------------------------------------------- overlays */
-    .zoom {
-      position: absolute; left: 14px; bottom: 14px;
-      display: flex; flex-direction: column; gap: 6px; z-index: 5;
+    /* ----------------------------------------------------------- sub-steps */
+    .strip {
+      position: absolute; left: 0; right: 0; z-index: 3;
+      display: flex; justify-content: center; align-items: stretch;
+      gap: 8px; padding: 0 24px;
+      pointer-events: none;
     }
-    .zoom button {
-      width: 34px; height: 34px;
-      border: 1px solid var(--border);
+    .strip[hidden] { display: none; }
+    .sub {
+      flex: 0 1 190px; min-width: 0;
+      display: flex; flex-direction: column; justify-content: center; gap: 0.12rem;
       background: var(--surface);
-      border-radius: 9px;
-      font-size: 1rem; line-height: 1;
-      color: var(--text);
-      cursor: pointer;
-      display: grid; place-items: center;
+      border: 1.5px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+      border-radius: 10px;
+      padding: 0.5rem 0.7rem;
+      text-align: center;
+      pointer-events: auto;
+      font: inherit; color: inherit; cursor: pointer;
+      opacity: 0; transform: translateY(6px) scale(0.96);
+      transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                  border-color 0.18s, background 0.18s, box-shadow 0.18s;
     }
-    .zoom button:hover { border-color: var(--accent); color: var(--accent); }
+    .strip.show .sub { opacity: 1; transform: none; }
+    .sub:hover { border-color: var(--accent); }
+    .sub.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: 0 0 0 3px rgba(10, 151, 196, 0.14);
+    }
+    .sub .s-n {
+      font-size: 0.64rem; font-weight: 700; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--accent);
+    }
+    .sub .s-t { font-size: 0.98rem; font-weight: 650; line-height: 1.2; letter-spacing: -0.005em; }
+    .sub .s-s {
+      font-size: 0.74rem; color: var(--muted); line-height: 1.2;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .sub-arrow { flex: 0 0 auto; align-self: center; color: var(--muted); font-size: 0.8rem; }
+
+    /* --------------------------------------------------------------- detail */
+    .detail {
+      position: absolute; z-index: 3;
+      overflow-x: hidden; overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-right: 4px;
+      opacity: 0; transform: translateY(10px);
+      transition: opacity 0.34s 0.12s ease, transform 0.34s 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .detail.show { opacity: 1; transform: none; }
+    .detail[hidden] { display: none; }
+
+    .d-file {
+      font-size: 0.8rem; font-weight: 700; letter-spacing: 0.02em;
+      color: var(--success);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 5px; padding: 0.12rem 0.45rem; display: inline-block;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .d-lead { font-size: 1rem; color: var(--text); margin: 0.5rem 0 0.2rem; max-width: 104ch; }
+    .d-cols { display: flex; flex-wrap: wrap; gap: 0.3rem 2.4rem; margin-top: 0.35rem; }
+    .d-cols > div { min-width: 0; }
+    .d-main { flex: 1.45 1 420px; }
+    .d-side { flex: 1 1 320px; }
+    .detail h4 {
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--muted); font-weight: 700;
+      margin: 0.55rem 0 0.3rem; padding-bottom: 0.2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .detail ul { list-style: none; margin: 0; }
+    .detail li {
+      position: relative; padding-left: 1rem;
+      font-size: 0.95rem; line-height: 1.45;
+      margin-bottom: 0.3rem; color: var(--text);
+    }
+    .detail li::before {
+      content: ""; position: absolute; left: 0; top: 0.5em;
+      width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+    }
+    .detail p.d-why { font-size: 0.95rem; line-height: 1.5; color: var(--text); }
+    /* -------------------------------------------- group overview: step list */
+    /* short overviews sit in the middle of the page instead of hugging the
+       top-left corner; `safe center` keeps the top reachable if it overflows */
+    .detail.center {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center;
+      justify-content: safe center;
+      text-align: center;
+    }
+    .detail.center .d-lead { max-width: 86ch; }
+    .detail.center .d-steps { text-align: left; margin-left: auto; margin-right: auto; }
+
+    .d-steps { list-style: none; counter-reset: ds; margin: 0.5rem 0 0; max-width: 74ch; }
+    .d-steps li {
+      counter-increment: ds;
+      position: relative; padding-left: 2.1rem;
+      margin-bottom: 0.55rem;
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.55rem;
+    }
+    .d-steps li::before {
+      content: counter(ds);
+      position: absolute; left: 0; top: 0.06em;
+      width: 1.45rem; height: 1.45rem; border-radius: 50%;
+      display: grid; place-items: center;
+      background: var(--accent-soft); color: var(--accent);
+      border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+      font-size: 0.76rem; font-weight: 700;
+    }
+    .ds-t { font-size: 1rem; font-weight: 650; letter-spacing: -0.005em; }
+    .ds-d { flex: 1 1 380px; font-size: 0.95rem; line-height: 1.45; color: var(--muted); }
+    .d-foot { margin-top: 0.5rem; font-size: 0.8rem; color: var(--muted); }
+
+    /* ------------------------------------------------- inline detail diagram */
+    .d-diagram { margin: 0.5rem auto 0.1rem; max-width: 980px; }
+    .d-diagram svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .dg-box {
+      fill: var(--surface);
+      stroke: color-mix(in srgb, var(--accent) 40%, var(--border));
+      stroke-width: 1.4;
+    }
+    .dg-box.out { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.8; }
+    .dg-t { fill: var(--text); font-family: inherit; font-size: 11.5px; font-weight: 650; }
+    .dg-s {
+      fill: var(--muted); font-size: 9.6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .dg-o { fill: var(--text); font-family: inherit; font-size: 12.5px; font-weight: 700; }
+    .dg-cap { fill: var(--muted); font-family: inherit; font-size: 10px; }
+    .dg-w { fill: none; stroke: #c8ced6; stroke-width: 1.6; stroke-linecap: round; }
+
+    .d-eg {
+      margin-top: 0.45rem; padding: 0.55rem 0.7rem;
+      background: var(--surface); border-left: 3px solid var(--accent);
+      border-radius: 6px; font-size: 0.9rem; line-height: 1.5;
+    }
+
+    /* --------------------------------------------------------------- chrome */
+    .back {
+      position: absolute; left: 14px; top: 14px; z-index: 6;
+      border: 1px solid var(--border); background: var(--surface);
+      border-radius: 9px; padding: 0.34rem 0.7rem;
+      font: inherit; font-weight: 600; font-size: 0.8rem;
+      color: var(--accent); cursor: pointer;
+      box-shadow: 0 6px 16px rgba(10, 20, 40, 0.08);
+    }
+    .back:hover { border-color: var(--accent); }
+    .back[hidden] { display: none; }
 
     .hint {
       position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
@@ -186,70 +317,24 @@
     }
     @media (max-width: 640px) { .hint { display: none; } }
 
-    /* --------------------------------------------------------- detail panel */
-    .panel {
-      position: absolute; top: 14px; right: 14px;
-      width: 340px;
-      max-height: calc(100% - 90px);
-      overflow-y: auto;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 1rem 1.1rem 1.1rem;
-      box-shadow: 0 14px 36px rgba(10, 20, 40, 0.14);
-      animation: panelIn 0.22s ease;
-      z-index: 6;
-    }
-    .panel[hidden] { display: none; }
-    @keyframes panelIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
-
-    .panel .close {
-      position: absolute; top: 0.45rem; right: 0.55rem;
-      border: none; background: none; cursor: pointer;
-      font-size: 1rem; line-height: 1; color: var(--muted);
-    }
-    .panel .close:hover { color: var(--text); }
-
-    .panel h3 { font-size: 1.05rem; font-weight: 650; margin-right: 1.2rem; }
-    .panel .detail-meta {
-      font-size: 0.76rem; color: var(--muted);
-      margin: 0.35rem 0 0.75rem;
-      padding-bottom: 0.65rem;
-      border-bottom: 1px solid var(--border);
-    }
-    .panel .lead { font-size: 0.85rem; color: var(--text); }
-    .panel ul { margin: 0.7rem 0 0 1.05rem; font-size: 0.82rem; color: var(--text); }
-    .panel li { margin-bottom: 0.35rem; }
-    .panel code {
-      background: var(--bg);
-      padding: 0.08rem 0.32rem;
-      border-radius: 4px;
-      font-size: 0.78rem;
-      color: var(--success);
-    }
-    .panel .example {
-      margin-top: 0.9rem;
-      padding: 0.65rem 0.75rem;
-      background: var(--bg);
-      border-radius: 8px;
-      font-size: 0.8rem;
-      border-left: 3px solid var(--accent);
-    }
-
-    @media (max-width: 620px) {
-      .panel {
-        left: 10px; right: 10px; width: auto;
-        top: auto; bottom: 10px;
-        max-height: 55%;
-      }
-      .zoom { bottom: auto; top: 12px; left: 12px; }
+    /* short windows (13" laptop, projector): shrink the copy rather than scroll it */
+    @media (max-height: 760px) {
+      .d-lead { font-size: 0.92rem; margin-top: 0.4rem; }
+      .detail li { font-size: 0.85rem; line-height: 1.35; margin-bottom: 0.22rem; }
+      .detail p.d-why { font-size: 0.85rem; line-height: 1.38; }
+      .d-eg { font-size: 0.8rem; padding: 0.42rem 0.6rem; }
+      .d-diagram { max-width: 700px; margin-top: 0.35rem; }
+      .d-steps li { margin-bottom: 0.4rem; }
+      .ds-t { font-size: 0.92rem; }
+      .ds-d { font-size: 0.85rem; line-height: 1.38; }
+      .detail h4 { margin: 0.42rem 0 0.24rem; }
+      .sub { padding: 0.4rem 0.6rem; }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .world.animate { transition: none; }
+      .node, .detail, .frame { animation: none; transition: opacity 0.2s; }
       .wire.loop { animation: none; }
-      .flow-dot { display: none; }
-      .node { animation: none; }
+      .fd { display: none; }
     }
   </style>
 </head>
@@ -257,7 +342,7 @@
   <header>
     <div class="brand">
       <h1>Conversational Shopping Agent</h1>
-      <span class="tagline">Multi-turn product search over a 50k Amazon catalog</span>
+      <span class="tagline">The whole pipeline on one screen — click any stage to see what it does and why</span>
     </div>
     <div class="metrics">
       <span class="metric">TechnicalScore <strong>0.824</strong></span>
@@ -268,389 +353,534 @@
   </header>
 
   <div class="stage" id="stage">
-    <div class="viewport" id="viewport">
-      <div class="world" id="world">
-        <svg class="wires" id="wires" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"></svg>
-      </div>
-    </div>
-
-    <div class="zoom">
-      <button id="z-in" title="Zoom in">+</button>
-      <button id="z-out" title="Zoom out">&minus;</button>
-      <button id="z-fit" title="Fit to screen">&#8862;</button>
-    </div>
-
-    <div class="hint">drag to pan · scroll to zoom · click a stage for detail</div>
-
-    <aside class="panel" id="panel" hidden></aside>
+    <svg class="wires" id="wires" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"></svg>
+    <div class="layer" id="frames"></div>
+    <div class="layer" id="nodes"></div>
+    <div class="strip" id="substeps" hidden></div>
+    <div class="detail" id="detail" hidden></div>
+    <button class="back" id="back" hidden>&larr; Back</button>
+    <p class="hint" id="hint">click a stage to zoom in</p>
   </div>
 
   <script>
-    const STEPS = [
-      {
-        id: "input",
-        num: 0,
-        title: "Customer message",
-        sub: "Simulated shopper turn",
-        tag: "Input",
+    /* ============================================================= structure */
+    const ORDER = ["input", "understand", "retrieve", "rank", "question"];
+    const GROUPY = new Set(["understand", "rank"]);
+    const META = {
+      input:      { tag: "Input",      title: "Customer message",      sub: "one simulated shopper turn" },
+      understand: { tag: "Steps 1–3",  title: "Parse the turn",        sub: "message → structured query" },
+      retrieve:   { tag: "Step 4",     title: "Retrieve candidates",   sub: "50,000 products → ~150" },
+      rank:       { tag: "Steps 5–7",  title: "Rank & return",         sub: "~150 → Top 10, in order" },
+      question:   { tag: "Loop",       title: "Clarification question", sub: "decides what we learn next" },
+    };
+
+    /* sub-step chips shown inside a focused group box; id -> DETAIL entry */
+    const SUBSTEPS = {
+      understand: [
+        { id: "parse",   n: "Step 1", t: "Parse message",     s: "parser.py" },
+        { id: "session", n: "Step 2", t: "Session store",     s: "session_store.py" },
+        { id: "plan",    n: "Step 3", t: "Build search plan", s: "search_plan.py" },
+      ],
+      rank: [
+        { id: "rerank", n: "Step 5", t: "Rule-based rerank",    s: "rerank.py" },
+        { id: "cross",  n: "Step 6", t: "Cross-encoder rerank", s: "cross_encoder_rerank.py" },
+        { id: "output", n: "Step 7", t: "Top 10 + response",    s: "agent.py" },
+      ],
+    };
+
+    /* ================================================= leaf detail content */
+    const DETAIL = {
+      input: {
         file: "evaluator/local_evaluator.py",
-        summary: "Each turn the customer sends a message. Scenarios: Buying, Browsing, Intent Override, Boundary.",
-        bullets: [
-          "Buying: discloses a hard constraint early",
-          "Browsing: starts vague (\"still exploring\")",
-          "Intent override: changes preference on turn 3–4",
-          "Boundary: may say \"no preference\" for an attribute",
+        lead: "Each session is one shopper and up to ten turns. There is no real conversation log behind it — the evaluator writes every message from a hidden card it builds out of the target product itself.",
+        how: [
+          "The card is made from the target's own title, features and details, each clue trimmed to 180 characters. So the shopper quotes the product back at us, almost word for word.",
+          "It holds only about four clues in total: two hard requirements and two soft preferences. There is not much to extract, which is why asking the right question matters more than asking often.",
+          "Four scenario types, and we are never told which one we are in. Buying states a requirement in the opener; browsing opens with “still exploring”; intent override replaces a preference on turn 3 or 4; boundary refuses our first question, then answers normally.",
+          "A reply only carries information if it matches the attribute we asked about, and it gives at most two new clues per turn. Ask for something already covered and we get “I don't have an additional preference for colour.”",
+          "The session stops the moment the target appears in our Top 10 — turn 3 with the right answer beats turn 8 with a better one.",
         ],
-        example: "Turn 1: \"I'm looking for men's t-shirts. A key requirement is: fabric type: 100% cotton.\"",
+        why: "Because the shopper is generated from the target, the words in a reply are usually a verbatim string from that product's catalog row. Matching that wording is not a loophole; it is the strongest honest signal available. So the rest of the pipeline is built around carrying those exact words through to the ranking step instead of paraphrasing them away.",
+        eg: "Turn 1 — “I'm looking for Men's T-Shirts. A key requirement is: fabric type: 100% cotton.”<br>Turn 2 — “For that, what matters is: 4.3 oz jersey knit; tagless collar.”",
       },
-      {
-        id: "parse",
-        num: 1,
-        title: "Parse message",
-        sub: "parser.py",
-        tag: "Understand",
+      understand: {
+        file: "parser.py · session_store.py · search_plan.py",
+        lead: "Three deterministic passes turn one turn of free text into a query the search stages can act on. No model, no API call — the same message always produces the same query.",
+        steps: [
+          { t: "Parse message", d: "Name what we can: material, colour, size, price, category — plus flags for a change of mind, a “no preference” answer, or a complaint." },
+          { t: "Session store", d: "Fold it into one state per session, so a clue from turn 2 still counts on turn 6 and we never ask for the same thing twice." },
+          { t: "Build search plan", d: "Emit required, optional and excluded terms — and the shopper's own sentences, kept word for word for retrieval and ranking alike." },
+        ],
+      },
+      rank: {
+        file: "rerank.py · cross_encoder_rerank.py · agent.py",
+        lead: "Retrieval hands over roughly 150 plausible products. This stage decides the order — which matters, because the score cares a lot about whether the right one is 1st or 8th.",
+        steps: [
+          { t: "Rule-based rerank", d: "A hand-written score over all 150: seven signals add points, four penalties take them away. This decides who makes the shortlist." },
+          { t: "Cross-encoder rerank", d: "A small pretrained model re-reads the top 15 with query and product side by side, and adjusts the order. Reordering only." },
+          { t: "Top 10 + response", d: "The first 10 valid catalog IDs, best first, plus the attribute we want answered next. Zero tokens — no language model in the loop." },
+        ],
+      },
+      parse: {
         file: "starter/components/parser.py",
-        summary: "Extract structured constraints (material, color, budget…) and flags (override, boundary, feedback).",
-        bullets: [
-          "Closed vocab for material, color, feature, brand, budget",
-          "Detects override phrases (\"actually\", \"changed my mind\")",
-          "Detects boundary (\"no preference\", \"use your judgment\")",
-          "Lossy by design — misses words like \"jersey\", \"tagless\"",
+        lead: "Turns one message into a list of constraints — attribute, value, positive or negative — plus three flags describing what kind of turn it was.",
+        how: [
+          "Word lists for material, colour, size, style, category, use case and features; a pattern for “brand X”; a pattern for price, where “under $40” becomes a hard cap and a bare “$25” becomes “around $25”.",
+          "“No polyester” and “without pockets” are read as exclusions, not requirements — the same word lists are checked twice, once for each polarity.",
+          "Three flags per turn: a change of mind (“actually”, “ignore my earlier preference”, “instead”), a waived attribute (“no preference”, “use your judgment”), and dissatisfaction (“not quite right”).",
+          "Anything outside those lists is dropped. That is a real limitation and we treat it as one rather than papering over it.",
         ],
-        example: "\"100% cotton under $40\" → constraints: material=cotton, budget=maximum $40",
+        why: "We tried to make the parser understand more, and stopped. Product wording is open-ended — “4.3 oz jersey knit” is exactly the phrase that identifies one t-shirt out of 50,000, and no word list will ever contain it. So retrieval and ranking read the raw sentence instead, and the parser keeps the two jobs it does reliably: naming a colour, material or price, and noticing a change of mind.",
+        eg: "“Something in black, 100% cotton, under $40, no polyester.” → colour = black · material = cotton · budget = maximum $40 · material ≠ polyester",
       },
-      {
-        id: "session",
-        num: 2,
-        title: "Session store",
-        sub: "session_store.py",
-        tag: "Remember",
+      session: {
         file: "starter/components/session_store.py",
-        summary: "Accumulates constraints across turns. Handles override (clear replaced attrs) and boundary (mark unconstrained).",
-        bullets: [
-          "Tracks disclosed / asked / unconstrained attributes",
-          "Override: demote old values to negative constraints",
-          "Persists category hint from opener (\"looking for …\")",
-          "Pre-override clues kept for retrieval, down-weighted in rank",
+        lead: "One state object per session holding everything the shopper has told us, everything we have already asked, and everything they have said they don't care about.",
+        how: [
+          "Constraints accumulate and nothing is forgotten between turns. The question policy reads the same state, which is how it avoids repeating itself.",
+          "Change of mind: clear only the attribute being replaced, move its old value into the exclusion list, and mark that attribute open again so we can ask a follow-up about it.",
+          "Waived attribute (“no preference for colour”): mark colour unconstrained, then stop asking about it and stop scoring it.",
+          "The category from the opening line is stored separately, and a change of mind never clears it — someone changing their mind about fabric is still shopping for t-shirts.",
         ],
-        example: "After override from polyester → cotton: old polyester becomes excluded; cotton attribute re-opened for questions.",
+        why: "Our first version wiped the whole state on a change of mind and kept only the category. That threw away several turns of still-valid clues to honour one correction, and intent override was our weakest scenario because of it. Replacing just the changed attribute, and keeping the earlier clues at reduced weight, took that scenario from 0.833 to 0.967 Hit Rate.",
+        eg: "Turns 1–2 give cotton, black, under $40. Turn 3: “Actually, ignore my earlier preference. What I need is: 100% polyester.” → cotton becomes an exclusion, polyester replaces it, black and the $40 cap survive untouched.",
       },
-      {
-        id: "plan",
-        num: 3,
-        title: "Build search plan",
-        sub: "search_plan.py + snippets.py",
-        tag: "Plan",
-        file: "starter/components/search_plan.py",
-        summary: "Turn session state into retrieval/rerank inputs: required terms, excluded terms, verbatim snippets.",
-        bullets: [
-          "exact_phrases = verbatim customer clues (not parser output)",
-          "snippet_terms feed token overlap in rerank",
-          "snippet_weights: pre-override clues at 0.35, post-override at 1.0",
-          "User profile preference_tags as soft optional terms",
+      plan: {
+        file: "starter/components/search_plan.py · snippets.py",
+        lead: "Builds the query object that retrieval and ranking both read: required, optional and excluded terms, plus the shopper's sentences exactly as they said them.",
+        how: [
+          "Sentences are cut from the raw message, not from the parser output. We strip the opener (“I'm looking for men's t-shirts,”), keep what follows the colon, split on semicolons and full stops, and drop turns that carry no information at all (“I don't have a preference for size”, “not quite right”).",
+          "Clues given before a change of mind are kept at 0.35 weight rather than deleted, because the shopper replaced one thing, not everything.",
+          "The anonymised profile's preference tags come in as optional terms: a small bonus if matched, never a requirement.",
+          "The same list of sentences goes to retrieval and to ranking. Guaranteeing that is the entire reason this file exists.",
         ],
-        example: "Snippets: [\"fabric type: 100% cotton\", \"4.3 oz jersey knit\", \"tagless collar\"]",
+        why: "Ranking a product on a thinner query than the one that found it is what buried correct answers in the middle of the list. Feeding the raw sentences to retrieval lifted pool recall from 0.860 to 0.985; feeding the identical text to the ranker was worth another 0.018 on the final score, 0.772 → 0.790.",
+        eg: "“For that, what matters is: 4.3 oz jersey knit; tagless collar.” → [“4.3 oz jersey knit”, “tagless collar”]",
       },
-      {
-        id: "retrieve",
-        num: 4,
-        title: "Retrieve candidates",
-        sub: "retrieval.py · ~150 products",
-        tag: "Search",
+      retrieve: {
         file: "starter/components/retrieval.py",
-        summary: "FTS5 index over 50k catalog. Multi-path union: rare-term AND, conjunctive core, category, broad OR.",
-        bullets: [
-          "Snippets drive rare-term AND queries (verbatim text)",
-          "Path tiering: conjunctive matches beat loose OR hits",
-          "Structured includes for material / color / brand",
-          "Pool size: 150 (CANDIDATE_POOL_SIZE)",
+        lead: "Cuts 50,000 products down to about 150 for the ranker to sort. It runs on SQLite's built-in full-text index, held in memory, built once when the agent starts (~40 s) and reused by every session.",
+        how: [
+          "Alongside the index we count how many products contain each word in the catalog. That tells us which of the shopper's words are genuinely rare, and rare words are what find one product out of 50,000 — “tagless” narrows things down, “comfortable” does not.",
+          "Path A — take the four rarest words of each disclosed sentence and require all of them. If that returns nothing it relaxes: four words, then two, then any of them.",
+          "Path B — one query that requires every clue at once, each clue matching any of its own words. If it comes back empty, drop the least selective clue and try again.",
+          "Paths C and D — the category from the opening line, and the colour / material / brand the parser found, as broad queries. These are the safety net on a vague first turn.",
+          "All paths are merged, then cut to 150 by how strong the evidence is: a product that satisfied a full multi-clue match ranks above one that merely matched a broad query, whatever the raw BM25 number says.",
         ],
-        example: "Target usually in pool once enough clues disclosed (~98.5% recall fully disclosed @200).",
+        why: "If the target is not in this pool, the turn is lost no matter how good the ranking is — so this stage is judged on recall alone and only orders things loosely. The tiering matters more than it sounds: BM25 scores from a short broad query and a strict multi-clause one are not comparable, and before we tiered them a loose match could push a genuine one out of the pool entirely.",
+        eg: "Measured with scripts/recall_check.py at a 200-product pool: the target is in the pool for 98.5% of sessions once everything has been disclosed, and 62.5% from the opening message alone.",
       },
-      {
-        id: "rerank",
-        num: 5,
-        title: "Rule-based rerank",
-        sub: "rerank.py",
-        tag: "Score",
+      rerank: {
         file: "starter/components/rerank.py",
-        summary: "Additive scoring: phrase match, snippet coverage, token overlap, attributes, penalties.",
-        bullets: [
-          "+ Exact phrase & per-clue token coverage on title/features/details",
-          "+ Hard attributes (material, color, category…)",
-          "− Wrong color/material, over budget, category mismatch",
-          "− Items shown after \"not quite right\" feedback",
+        lead: "One score per candidate, entirely hand-written and readable end to end. Seven terms add evidence, four take it away, and the total decides the order.",
+        how: [
+          "Exact sentence match: “fabric type: 100% cotton” in the title is worth 5 points, in the features or details 2.5, in the description 1. Punctuation is ignored on both sides — the shopper says “key: value” while our field text reads “key value”, so a plain substring test would miss on the colon alone.",
+          "Partial credit: clues are cut off at 180 characters and can end mid-word, so each clue also scores the share of its words that the product contains. Scored per clue, so one long sentence cannot drown out three short ones.",
+          "Word overlap weighted by where it lands (title 5.0 down to description 1.0), points for each named attribute the product contains, and rating × review count as a tie-break.",
+          "Penalties are large on purpose: an excluded term costs up to 4 points, the wrong colour or material 3.5, over budget 5 or more, the wrong category 2.5. Showing something the shopper has already ruled out is worse than showing a merely mediocre match.",
         ],
-        example: "Decoy cotton tee ranks high on \"cotton\"; target wins when tagless/jersey snippets match.",
+        why: "Nothing here is learned, so every regression traces back to a single number that we can read and change. It is also fast enough to score 150 products per turn on a CPU, which is what lets the whole agent run offline with no API bill.",
+        eg: "A plain cotton tee and the target both match “cotton”. The target also covers “4.3 oz jersey knit” and “tagless collar” — that coverage, not the word “cotton”, is what separates them.",
       },
-      {
-        id: "cross",
-        num: 6,
-        title: "Cross-encoder rerank",
-        sub: "cross_encoder_rerank.py · always on",
-        tag: "Neural",
+      cross: {
         file: "starter/components/cross_encoder_rerank.py",
-        summary: "Compulsory second stage on the top 15 rule-scored items. Jointly scores (customer query, product text) pairs.",
-        bullets: [
-          "Model: cross-encoder/ms-marco-MiniLM-L-6-v2 (~90 MB, auto-downloaded on first run)",
-          "final = rule_score + 2.0 × cross_encoder_score",
-          "sentence-transformers auto-installed from requirements.txt in Agent.__init__",
-          "Ordering only: MRR 0.583 → 0.606, Hit@10 unchanged",
-          "TECHJAM_CROSS_ENCODER_DISABLE=1 for the rule-only baseline (0.817)",
+        lead: "A small pretrained ranking model (ms-marco-MiniLM-L-6-v2, about 90 MB) re-reads the top 15 with the query and the product text side by side, and adjusts the order.",
+        how: [
+          "final score = rule score + 2.0 × model score, applied to the top 15 only. Both numbers came from a sweep over the public set, in scripts/cross_encoder_sweep.py.",
+          "A cross-encoder reads the pair together instead of comparing two separately-computed embeddings. That is slower, but far better at the last few positions — which is exactly where MRR is won.",
+          "It runs locally on CPU: no API, no key, nothing billed per turn. The weights download once on first run and are cached after that.",
+          "TECHJAM_CROSS_ENCODER_DISABLE=1 turns it off and returns the pure rule ranking, which is how we measure what it is actually worth.",
         ],
-        example: "Query + target product read together → target jumps from rank 3 to rank 1.",
+        why: "It is worth about +0.007 on the final score: MRR 0.583 → 0.606, with Hit Rate unchanged at 0.965 and identical in all four scenarios. Small, but it is the one stage that can improve the top of the list without risking the bottom of it, because it only reorders a shortlist the rules already agreed on. The clearest gain is on intent override, MRR 0.690 → 0.765.",
+        eg: "The rules have the target 3rd. Read together with the query, it goes 1st — worth 0.67 of MRR on that session.",
       },
-      {
-        id: "output",
-        num: 7,
-        title: "Top 10 recommendations",
-        sub: "agent.py respond()",
-        tag: "Output",
+      output: {
         file: "starter/agent.py",
-        summary: "Return best-first list of parent_asin. Evaluator scores exact match in first 10 unique valid IDs.",
-        bullets: [
-          "Hit = target appears anywhere in Top 10",
-          "MRR = 1/rank (rank 1 is best)",
-          "Session ends on hit or after turn 10",
+        lead: "Assemble the reply: up to 10 product IDs best first, a message, the attribute we want answered next, and a token count of zero.",
+        how: [
+          "The evaluator keeps the first 10 unique IDs that exist in the catalog and drops everything else, so there is nothing to gain from padding the list.",
+          "A hit is exact parent_asin equality anywhere in those 10. MRR is 1 / position, so position is worth real points — 1st is worth five times 5th.",
+          "If respond() throws or returns the wrong shape, the evaluator catches it and scores that turn as a miss. No crash, no error message, just a wasted turn — so the whole path is defensive.",
+          "Token usage is reported as zero, because there is no language model in the loop at all.",
         ],
-        example: "recommendations: [{\"parent_asin\": \"B0…\"}, …] up to 10 items",
+        why: "Everything upstream exists to fill these ten slots in the right order. It is also where we stay inside the competition rules: the standard library plus one small local model, no edits to the catalog, no IDs invented outside it, no training and no external calls.",
+        eg: "{ recommendations: [{parent_asin: “B07…”}, … 10 items], ask_attribute: “feature”, usage: { prompt_tokens: 0, completion_tokens: 0 } }",
       },
-      {
-        id: "question",
-        num: 8,
-        title: "Clarification question",
-        sub: "questions.py",
-        tag: "Ask",
+      question: {
         file: "starter/components/questions.py",
-        summary: "Choose next ask_attribute to pull one more constraint from the simulator.",
-        bullets: [
-          "Priority: feature first, then material/color…",
-          "Buying opener → skip redundant category asks",
-          "Turn ≥5: prefer \"other\" for bulk disclosure",
-          "Post-override: re-ask the replaced attribute",
+        lead: "Pick the single attribute to ask about next. The shopper only answers the attribute we name, so this one choice decides what we learn on the following turn.",
+        how: [
+          "Never ask for something already answered, already asked, or explicitly waived — the session state tracks all three.",
+          "Ask about a feature first, and not by taste: the evaluator files any clue it cannot label as budget, material, colour, size, style or use case under “feature”, which makes it by far the largest bucket of things left to learn.",
+          "If the opening line already carried a hard requirement — a buying session — skip past category and spend the turns on details instead.",
+          "From turn 5 the catch-all “other” moves up the list, and from turn 7 it wins outright. It matches any remaining clue whatsoever, which is the right move once the specific questions are exhausted.",
+          "Straight after a change of mind, ask about the attribute that just changed, since the replacement usually arrives as a bare word (“polyester”) rather than the full detail we need.",
         ],
-        example: "message: \"What feature matters most?\" · ask_attribute: \"feature\"",
+        why: "Rewriting this policy was the single biggest score gain in the project — +0.097, more than any retrieval or model change — and it costs nothing at runtime. It works because the simulated shopper is generous when asked precisely and silent when asked vaguely, and because time is scored: every wasted question adds a turn to MTTC and drags Efficiency down with it.",
+        eg: "“What feature matters most to you?” (ask_attribute: feature) → “For that, what matters is: 4.3 oz jersey knit; tagless collar.” Two new clues, and the next retrieval finds the target.",
       },
+    };
+
+    /* ================================================ inline detail diagrams */
+    /* four retrieval paths run independently, then merge into one pool */
+    const PATHS = [
+      { t: "Path A · rare terms",  s: "4 rarest words per clue, AND" },
+      { t: "Path B · every clue",  s: "conjunctive, relaxes if empty" },
+      { t: "Path C · category",    s: "from the opening line" },
+      { t: "Path D · attributes",  s: "colour · material · brand" },
     ];
 
-    /* ------------------------------------------------------------- layout */
-    const NODE_W = 196, NODE_H = 96, GAP = 68, LANE_Y = 40, MARGIN = 34;
-    const byId = (id) => STEPS.find((s) => s.id === id);
-
-    const lane = STEPS.filter((s) => s.id !== "question");
-    lane.forEach((s, i) => { s._x = MARGIN + i * (NODE_W + GAP); s._y = LANE_Y; });
-    const q = byId("question");
-    q._x = MARGIN + 3 * (NODE_W + GAP);
-    q._y = LANE_Y + NODE_H + 96;
-
-    const WORLD_W = lane[lane.length - 1]._x + NODE_W + MARGIN;
-    const WORLD_H = q._y + NODE_H + MARGIN;
-
-    const EDGES = [];
-    for (let i = 0; i < lane.length - 1; i++) EDGES.push({ from: lane[i].id, to: lane[i + 1].id, type: "h" });
-    EDGES.push({ from: "output", to: "question", type: "loop" });
-    EDGES.push({ from: "question", to: "input", type: "loop", label: "next turn ≤ 10" });
-
-    function edgePath(e) {
-      const a = byId(e.from), b = byId(e.to);
-      if (e.type === "h") {
-        const x1 = a._x + NODE_W, y1 = a._y + NODE_H / 2;
-        const x2 = b._x,          y2 = b._y + NODE_H / 2;
-        const dx = Math.max(28, (x2 - x1) * 0.5);
-        return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
-      }
-      if (e.from === "output") { // output -> question : drop down, sweep left
-        const x1 = a._x + NODE_W / 2, y1 = a._y + NODE_H;
-        const x2 = b._x + NODE_W,     y2 = b._y + NODE_H / 2;
-        return `M ${x1} ${y1} C ${x1} ${y1 + 90}, ${x2 + 150} ${y2}, ${x2} ${y2}`;
-      }
-      // question -> input : sweep left, climb up
-      const x1 = a._x, y1 = a._y + NODE_H / 2;
-      const x2 = b._x + NODE_W / 2, y2 = b._y + NODE_H;
-      return `M ${x1} ${y1} C ${x1 - 150} ${y1}, ${x2} ${y2 + 90}, ${x2} ${y2}`;
-    }
-
-    function labelPoint(e) {
-      const a = byId(e.from), b = byId(e.to);
-      const x1 = a._x, y1 = a._y + NODE_H / 2;
-      const x2 = b._x + NODE_W / 2, y2 = b._y + NODE_H;
-      return { x: (x1 + x2) / 2 - 150, y: (y1 + y2) / 2 + 46 };
-    }
-
-    /* ---------------------------------------------------------- rendering */
-    const world = document.getElementById("world");
-    const viewport = document.getElementById("viewport");
-    const svg = document.getElementById("wires");
-    const panel = document.getElementById("panel");
-
-    world.style.width = WORLD_W + "px";
-    world.style.height = WORLD_H + "px";
-    svg.setAttribute("viewBox", `0 0 ${WORLD_W} ${WORLD_H}`);
-    svg.setAttribute("width", WORLD_W);
-    svg.setAttribute("height", WORLD_H);
-
-    let markup =
-      `<defs>` +
-      `<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c8ced6"/></marker>` +
-      `<marker id="ah-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0ca678"/></marker>` +
-      `</defs>`;
-
-    EDGES.forEach((e, i) => {
-      const cls = "wire" + (e.type === "loop" ? " loop" : "");
-      markup += `<path id="w${i}" class="${cls}" d="${edgePath(e)}" marker-end="url(#ah)"/>`;
-      if (e.label) {
-        const lp = labelPoint(e);
-        markup += `<text class="wire-label" x="${lp.x}" y="${lp.y}" text-anchor="middle">${e.label}</text>`;
-      }
-      const dur = e.type === "loop" ? 3.4 : 2.4;
-      const n = 3;
-      let dots = `<g class="dots" data-edge="${i}">`;
-      for (let d = 0; d < n; d++) {
-        dots +=
-          `<circle class="flow-dot" r="4">` +
-          `<animateMotion dur="${dur}s" begin="${-(d * dur) / n}s" repeatCount="indefinite" calcMode="linear">` +
-          `<mpath href="#w${i}" xlink:href="#w${i}"/></animateMotion></circle>`;
-      }
-      dots += `</g>`;
-      markup += dots;
-    });
-    svg.innerHTML = markup;
-
-    STEPS.forEach((step, i) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      const kind = step.id === "input" ? "k-in"
-        : step.id === "output" ? "k-out"
-        : step.id === "question" ? "k-loop"
-        : step.optional ? "k-opt" : "k-core";
-      btn.className = "node " + kind;
-      btn.dataset.id = step.id;
-      btn.style.left = step._x + "px";
-      btn.style.top = step._y + "px";
-      btn.style.animationDelay = (i * 55) + "ms";
-      btn.innerHTML =
-        `<span class="n-tag">${step.tag}${step.optional ? " · opt" : ""}</span>` +
-        `<span class="n-num">Step ${step.num}</span>` +
-        `<span class="n-title">${step.title}</span>` +
-        `<span class="n-sub">${step.sub}</span>`;
-      btn.addEventListener("click", (ev) => { ev.stopPropagation(); select(step.id); });
-      world.appendChild(btn);
-    });
-
-    /* ------------------------------------------------------- selection */
-    function renderDetail(step) {
-      panel.innerHTML =
-        `<button class="close" aria-label="Close">&times;</button>` +
-        `<h3>${step.title}</h3>` +
-        `<div class="detail-meta">Step ${step.num} · ${step.tag} · <code>${step.file}</code></div>` +
-        `<p class="lead">${step.summary}</p>` +
-        `<ul>${step.bullets.map((b) => `<li>${b}</li>`).join("")}</ul>` +
-        `<div class="example"><strong>Example</strong><br/>${step.example}</div>`;
-      panel.querySelector(".close").addEventListener("click", deselect);
-    }
-
-    function select(id) {
-      world.querySelectorAll(".node.active").forEach((n) => n.classList.remove("active"));
-      svg.querySelectorAll(".wire.hot").forEach((w) => { w.classList.remove("hot"); w.setAttribute("marker-end", "url(#ah)"); });
-      svg.querySelectorAll(".flow-dot.hot").forEach((d) => d.classList.remove("hot"));
-
-      const node = world.querySelector(`.node[data-id="${id}"]`);
-      if (node) node.classList.add("active");
-
-      EDGES.forEach((e, i) => {
-        if (e.from !== id && e.to !== id) return;
-        const w = svg.querySelector(`#w${i}`);
-        if (w) { w.classList.add("hot"); w.setAttribute("marker-end", "url(#ah-hot)"); }
-        svg.querySelectorAll(`.dots[data-edge="${i}"] .flow-dot`).forEach((d) => d.classList.add("hot"));
+    function retrievalPathsSVG() {
+      const BW = 204, BH = 46, GAP = 28, MX = 450, MY = 100;
+      const boxes = PATHS.map((p, i) => {
+        const x = i * (BW + GAP);
+        /* land on distinct points of the merge box so the four heads funnel in
+           rather than pile up on one pixel */
+        return { ...p, x, cx: x + BW / 2, ex: MX + (i - 1.5) * 46 };
       });
 
-      renderDetail(byId(id));
-      panel.hidden = false;
+      const wires = boxes
+        .map((b) => `<path class="dg-w" d="M ${b.cx} ${BH} C ${b.cx} ${BH + 32}, ${b.ex} ${MY - 34}, ${b.ex} ${MY}" marker-end="url(#dgah)"/>`)
+        .join("");
+
+      const cells = boxes
+        .map((b) =>
+          `<rect class="dg-box" x="${b.x}" y="0" width="${BW}" height="${BH}" rx="10"/>` +
+          `<text class="dg-t" x="${b.cx}" y="19" text-anchor="middle">${b.t}</text>` +
+          `<text class="dg-s" x="${b.cx}" y="34" text-anchor="middle">${b.s}</text>`
+        )
+        .join("");
+
+      return (
+        `<div class="d-diagram"><svg viewBox="0 0 900 154" role="img" ` +
+        `aria-label="Four retrieval paths — rare terms, every clue, category and attributes — merging into one pool of about 150 candidates.">` +
+        `<defs><marker id="dgah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">` +
+        `<path d="M0 0 L10 5 L0 10 z" fill="#c8ced6"/></marker></defs>` +
+        wires + cells +
+        `<rect class="dg-box out" x="300" y="${MY}" width="300" height="36" rx="11"/>` +
+        `<text class="dg-o" x="${MX}" y="${MY + 23}" text-anchor="middle">merge → one pool of ~150</text>` +
+        `<text class="dg-cap" x="${MX}" y="152" text-anchor="middle">` +
+        `cut by evidence tier, not by raw BM25 — a full multi-clue match outranks a broad one</text>` +
+        `</svg></div>`
+      );
     }
 
-    function deselect() {
-      world.querySelectorAll(".node.active").forEach((n) => n.classList.remove("active"));
-      svg.querySelectorAll(".wire.hot").forEach((w) => { w.classList.remove("hot"); w.setAttribute("marker-end", "url(#ah)"); });
-      svg.querySelectorAll(".flow-dot.hot").forEach((d) => d.classList.remove("hot"));
-      panel.hidden = true;
+    const DIAGRAMS = { retrieve: retrievalPathsSVG };
+
+    /* ============================================================== elements */
+    const STAGE  = document.getElementById("stage");
+    const SVG    = document.getElementById("wires");
+    const NODES  = document.getElementById("nodes");
+    const FRAMES = document.getElementById("frames");
+    const PANEL  = document.getElementById("detail");
+    const SUB    = document.getElementById("substeps");
+    const BACK   = document.getElementById("back");
+    const HINT   = document.getElementById("hint");
+
+    const state = { focused: null, sub: null, geo: null };
+
+    const rect = () => STAGE.getBoundingClientRect();
+    const nodeById = (nodes, id) => nodes.find((n) => n.id === id);
+
+    /* --------------------------------------------------------------- layout */
+    function layout() {
+      const { width: W, height: H } = rect();
+      const ids = ORDER;
+      const n = ids.length;
+      const gap = Math.max(28, Math.min(54, W * 0.035));
+      const margin = Math.max(34, W * 0.05);
+      let bw = (W - margin * 2 - gap * (n - 1)) / n;
+      bw = Math.max(120, Math.min(208, bw));
+      const bh = H < 760 ? 94 : 106;
+      const total = bw * n + gap * (n - 1);
+      const x0 = (W - total) / 2;
+      const y = Math.max(66, H * 0.27);
+      const nodes = ids.map((id, i) => ({ id, x: x0 + i * (bw + gap), y, w: bw, h: bh }));
+      const wires = [];
+      for (let i = 0; i < n - 1; i++) wires.push({ type: "h", from: ids[i], to: ids[i + 1] });
+      wires.push({ type: "loop", from: "question", to: "input", label: "next turn ≤ 10" });
+      const frames = [{
+        from: "understand", to: "rank",
+        label: "The three main steps",
+        note: "one turn, no LLM in the loop",
+        padX: Math.min(20, gap * 0.42), padTop: 26, padBottom: 16,
+      }];
+      return { nodes, wires, frames };
     }
 
-    /* ----------------------------------------------------------- camera */
-    let cam = { x: 0, y: 0, k: 1 };
-    const clampK = (k) => Math.min(2.4, Math.max(0.25, k));
-
-    function apply(anim) {
-      world.classList.toggle("animate", !!anim);
-      world.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.k})`;
-      if (anim) setTimeout(() => world.classList.remove("animate"), 380);
-    }
-
-    function fit(anim = true) {
-      const r = viewport.getBoundingClientRect();
-      const pad = 46;
-      const k = clampK(Math.min((r.width - pad * 2) / WORLD_W, (r.height - pad * 2) / WORLD_H));
-      cam = { k, x: (r.width - WORLD_W * k) / 2, y: (r.height - WORLD_H * k) / 2 };
-      apply(anim);
-    }
-
-    function zoomAround(px, py, factor, anim) {
-      const k = clampK(cam.k * factor);
-      const ratio = k / cam.k;
-      cam.x = px - (px - cam.x) * ratio;
-      cam.y = py - (py - cam.y) * ratio;
-      cam.k = k;
-      apply(anim);
-    }
-
-    viewport.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      const r = viewport.getBoundingClientRect();
-      zoomAround(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015), false);
-    }, { passive: false });
-
-    let drag = null;
-    viewport.addEventListener("pointerdown", (e) => {
-      if (e.target.closest(".node") || e.target.closest(".panel") || e.target.closest(".zoom")) return;
-      drag = { x: e.clientX, y: e.clientY, ox: cam.x, oy: cam.y, moved: 0 };
-      viewport.classList.add("panning");
-      viewport.setPointerCapture(e.pointerId);
-    });
-    viewport.addEventListener("pointermove", (e) => {
-      if (!drag) return;
-      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      drag.moved += Math.abs(dx) + Math.abs(dy);
-      cam.x = drag.ox + dx;
-      cam.y = drag.oy + dy;
-      apply(false);
-    });
-    viewport.addEventListener("pointerup", (e) => {
-      const wasDrag = drag && drag.moved > 4;
-      viewport.classList.remove("panning");
-      drag = null;
-      if (!wasDrag && !e.target.closest(".node") && !e.target.closest(".panel") && !e.target.closest(".zoom")) {
-        deselect();
+    function wirePath(w, nodes) {
+      const a = nodeById(nodes, w.from), b = nodeById(nodes, w.to);
+      if (w.type === "h") {
+        const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2;
+        const dx = Math.max(22, (x2 - x1) * 0.5);
+        return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
       }
-    });
-    viewport.addEventListener("dblclick", (e) => {
-      if (e.target.closest(".node")) return;
-      fit();
+      const x1 = a.x + a.w / 2, y1 = a.y + a.h, x2 = b.x + b.w / 2, y2 = b.y + b.h;
+      const drop = Math.max(y1, y2) + Math.min(120, a.y * 0.5 + 70);
+      return `M ${x1} ${y1} C ${x1} ${drop}, ${x2} ${drop}, ${x2} ${y2}`;
+    }
+    function loopLabel(w, nodes) {
+      const a = nodeById(nodes, w.from), b = nodeById(nodes, w.to);
+      const y1 = a.y + a.h, y2 = b.y + b.h;
+      const drop = Math.max(y1, y2) + Math.min(120, a.y * 0.5 + 70);
+      return { x: (a.x + a.w / 2 + b.x + b.w / 2) / 2, y: drop + 4 };
+    }
+
+    /* --------------------------------------------------------------- paint */
+    function paint() {
+      const geo = layout();
+      state.geo = geo;
+      const { width: W, height: H } = rect();
+
+      SVG.setAttribute("viewBox", `0 0 ${W} ${H}`);
+      SVG.setAttribute("width", W);
+      SVG.setAttribute("height", H);
+
+      let m =
+        `<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">` +
+        `<path d="M0 0 L10 5 L0 10 z" fill="#c8ced6"/></marker></defs>`;
+      geo.wires.forEach((w, i) => {
+        m += `<path id="w${i}" class="wire${w.type === "loop" ? " loop" : ""}" d="${wirePath(w, geo.nodes)}" marker-end="url(#ah)"/>`;
+        if (w.label) {
+          const lp = loopLabel(w, geo.nodes);
+          m += `<text class="wire-label" x="${lp.x}" y="${lp.y}" text-anchor="middle">${w.label}</text>`;
+        }
+        const dur = w.type === "loop" ? 3.6 : 2.6;
+        m += `<g class="dots">`;
+        for (let k = 0; k < 3; k++) {
+          m +=
+            `<circle class="fd" r="3.6"><animateMotion dur="${dur}s" begin="${(-(k * dur) / 3).toFixed(2)}s" ` +
+            `repeatCount="indefinite" calcMode="linear"><mpath href="#w${i}" xlink:href="#w${i}"/></animateMotion></circle>`;
+        }
+        m += `</g>`;
+      });
+      SVG.innerHTML = m;
+
+      FRAMES.innerHTML = (geo.frames || []).map((f) => frameHTML(f, geo.nodes)).join("");
+
+      NODES.innerHTML = geo.nodes.map((nd, i) => nodeHTML(nd, i)).join("");
+      NODES.querySelectorAll(".node").forEach((el) => {
+        el.addEventListener("animationend", () => { el.style.animation = "none"; }, { once: true });
+        el.addEventListener("click", (ev) => { ev.stopPropagation(); onNode(el.dataset.id); });
+      });
+
+      if (state.focused) {
+        applyFocus(state.focused);
+      } else {
+        SVG.classList.remove("dim");
+        FRAMES.querySelectorAll(".frame").forEach((el) => el.classList.remove("dim"));
+        PANEL.hidden = true;
+        PANEL.classList.remove("show");
+        SUB.hidden = true;
+        SUB.classList.remove("show");
+        BACK.hidden = true;
+        HINT.textContent = "click a stage to zoom in";
+      }
+    }
+
+    function frameHTML(f, nodes) {
+      const a = nodeById(nodes, f.from), b = nodeById(nodes, f.to);
+      if (!a || !b) return "";
+      const x = a.x - f.padX;
+      const y = a.y - f.padTop;
+      const w = b.x + b.w + f.padX - x;
+      const h = Math.max(a.h, b.h) + f.padTop + f.padBottom;
+      return (
+        `<div class="frame" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px">` +
+        `<span class="frame-label">${f.label}</span>` +
+        (f.note ? `<span class="frame-note">${f.note}</span>` : "") +
+        `</div>`
+      );
+    }
+
+    function nodeHTML(nd, i) {
+      const st = `left:${nd.x}px;top:${nd.y}px;width:${nd.w}px;height:${nd.h}px;animation-delay:${i * 40}ms`;
+      const meta = META[nd.id];
+      const grp = GROUPY.has(nd.id);
+      const hint = "▸ details";
+      return (
+        `<button class="node ${grp ? "group" : ""}" data-id="${nd.id}" style="${st}">` +
+        `<span class="n-tag">${meta.tag}</span>` +
+        `<span class="n-title">${meta.title}</span>` +
+        `<span class="n-sub">${meta.sub}</span>` +
+        `<span class="n-hint">${hint}</span>` +
+        `</button>`
+      );
+    }
+
+    /* ---------------------------------------------------------- interaction */
+    function onNode(id) {
+      if (!state.focused) focus(id);
+    }
+
+    function focus(id) {
+      state.focused = id;
+      state.sub = null;
+      applyFocus(id);
+    }
+
+    /* clicking a sub-step swaps the detail panel; clicking it again goes back */
+    function onSub(subId) {
+      state.sub = state.sub === subId ? null : subId;
+      applyFocus(state.focused);
+    }
+
+    function applyFocus(id) {
+      const { width: W, height: H } = rect();
+      const nd = nodeById(state.geo.nodes, id);
+      if (!nd) { state.focused = null; return; }
+
+      const scale = 1.08;
+      const heroTop = H < 760 ? 12 : Math.max(18, H * 0.05);
+      const heroH = nd.h * scale;
+      const dx = W / 2 - (nd.x + nd.w / 2);
+      const dy = heroTop + heroH / 2 - (nd.y + nd.h / 2);
+
+      SVG.classList.add("dim");
+      FRAMES.querySelectorAll(".frame").forEach((el) => {
+        el.style.animation = "none";
+        el.classList.add("dim");
+      });
+      NODES.querySelectorAll(".node").forEach((el) => {
+        el.style.animation = "none";
+        if (el.dataset.id === id) {
+          el.classList.add("hero");
+          el.classList.remove("away");
+          el.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+        } else {
+          el.classList.add("away");
+          el.classList.remove("hero");
+          el.style.transform = "";
+        }
+      });
+
+      BACK.hidden = false;
+      BACK.textContent = state.sub ? "← Back to the stage" : "← Back";
+
+      const subs = SUBSTEPS[id];
+      if (subs) {
+        HINT.textContent = state.sub
+          ? "click the highlighted step again for the overview · Esc to zoom out"
+          : "click a step for its detail · Esc to zoom out";
+      } else {
+        HINT.textContent = "Esc or ← Back to zoom out";
+      }
+
+      const subTop = heroTop + heroH + 12;
+      const subBoxH = 88;
+      const panelTop = subs ? subTop + subBoxH + 14 : heroTop + heroH + 20;
+      renderSubs(subs, subTop);
+      renderDetail(state.sub || id, { W, H, panelTop });
+    }
+
+    function renderSubs(subs, top) {
+      if (!subs) { SUB.hidden = true; SUB.classList.remove("show"); SUB.innerHTML = ""; return; }
+      SUB.style.top = top + "px";
+      SUB.innerHTML = subs
+        .map((x, i) =>
+          (i ? `<span class="sub-arrow">→</span>` : "") +
+          `<button class="sub ${state.sub === x.id ? "active" : ""}" data-sub="${x.id}" ` +
+          `aria-pressed="${state.sub === x.id}" style="transition-delay:${i * 70}ms">` +
+          `<span class="s-n">${x.n}</span><span class="s-t">${x.t}</span><span class="s-s">${x.s}</span>` +
+          `</button>`
+        )
+        .join("");
+      SUB.querySelectorAll(".sub").forEach((el) => {
+        el.addEventListener("click", (ev) => { ev.stopPropagation(); onSub(el.dataset.sub); });
+      });
+      SUB.hidden = false;
+      requestAnimationFrame(() => SUB.classList.add("show"));
+    }
+
+    function renderDetail(id, g) {
+      const data = DETAIL[id];
+      if (!data) return;
+      const panelW = Math.min(1280, g.W - 40);
+      const top = g.panelTop;
+
+      /* an overview is short, so it takes the whole remaining height and
+         centres inside it; a full leaf panel stays top-aligned and scrolls */
+      const avail = Math.max(120, g.H - top - 16);
+      const centered = Boolean(data.steps);
+
+      PANEL.classList.toggle("center", centered);
+      PANEL.style.left = (g.W - panelW) / 2 + "px";
+      PANEL.style.top = top + "px";
+      PANEL.style.width = panelW + "px";
+      PANEL.style.maxHeight = avail + "px";
+      PANEL.style.height = centered ? avail + "px" : "auto";
+      /* group overviews are a one-line-per-step summary — the depth lives in
+         each sub-step's own panel, so don't repeat it here */
+      const body = data.steps
+        ? `<ol class="d-steps">` +
+          data.steps
+            .map((s) => `<li><span class="ds-t">${s.t}</span><span class="ds-d">${s.d}</span></li>`)
+            .join("") +
+          `</ol><p class="d-foot">Click a step above for how it works and why.</p>`
+        : `<div class="d-cols">` +
+          `<div class="d-main"><h4>How it works</h4><ul>${data.how.map((x) => `<li>${x}</li>`).join("")}</ul></div>` +
+          `<div class="d-side"><h4>Why we built it this way</h4><p class="d-why">${data.why}</p>` +
+          `<h4>Example</h4><div class="d-eg">${data.eg}</div></div>` +
+          `</div>`;
+
+      PANEL.innerHTML =
+        `<span class="d-file">${data.file}</span>` +
+        `<p class="d-lead">${data.lead}</p>` +
+        (DIAGRAMS[id] ? DIAGRAMS[id]() : "") +
+        body;
+      PANEL.hidden = false;
+      PANEL.scrollTop = 0;
+      requestAnimationFrame(() => PANEL.classList.add("show"));
+    }
+
+    function unfocus() {
+      if (!state.focused) return;
+      state.focused = null;
+      state.sub = null;
+      PANEL.classList.remove("show");
+      SUB.classList.remove("show");
+      setTimeout(() => {
+        PANEL.hidden = true; PANEL.innerHTML = "";
+        SUB.hidden = true; SUB.innerHTML = "";
+      }, 300);
+      SVG.classList.remove("dim");
+      FRAMES.querySelectorAll(".frame").forEach((el) => el.classList.remove("dim"));
+      NODES.querySelectorAll(".node").forEach((el) => {
+        el.classList.remove("hero", "away");
+        el.style.transform = "";
+      });
+      BACK.hidden = true;
+      HINT.textContent = "click a stage to zoom in";
+    }
+
+    /* --------------------------------------------------------------- events */
+    function goBack() {
+      if (state.sub) { onSub(state.sub); return; }   // step detail -> group overview
+      unfocus();
+    }
+
+    BACK.addEventListener("click", goBack);
+
+    STAGE.addEventListener("click", (e) => {
+      if (e.target.closest(".node") || e.target.closest("#detail") ||
+          e.target.closest("#substeps") || e.target.closest("#back")) return;
+      if (state.focused) unfocus();
     });
 
-    document.getElementById("z-in").addEventListener("click", () => {
-      const r = viewport.getBoundingClientRect();
-      zoomAround(r.width / 2, r.height / 2, 1.3, true);
+    window.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || !state.focused) return;
+      if (state.sub) { onSub(state.sub); return; }   // step detail -> group overview
+      unfocus();
     });
-    document.getElementById("z-out").addEventListener("click", () => {
-      const r = viewport.getBoundingClientRect();
-      zoomAround(r.width / 2, r.height / 2, 1 / 1.3, true);
-    });
-    document.getElementById("z-fit").addEventListener("click", () => fit());
 
-    window.addEventListener("resize", () => fit(false));
-    window.addEventListener("keydown", (e) => { if (e.key === "Escape") deselect(); });
+    let rt;
+    window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(paint, 120); });
 
-    /* ------------------------------------------------------------- boot */
-    fit(false);
+    /* --------------------------------------------------------------- boot */
+    (function boot() {
+      if (rect().height < 40) { requestAnimationFrame(boot); return; }
+      paint();
+    })();
   </script>
 </body>
 </html>
